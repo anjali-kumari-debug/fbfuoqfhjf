@@ -11,7 +11,7 @@ Hour estimates are guides. Stop and review at the end of each stage.
       intervals, latest forecast at or before the cutoff, coverage, and error
       metrics. pytest covers edge cases (cutoff boundary, missing data,
       31 Jan → 1 Feb).
-- [ ] **4. FastAPI endpoints (1.5h):** for example `/api/health`,
+- [x] **4. FastAPI endpoints (1.5h):** for example `/api/health`,
       `/api/decision?date=&cutoff=` and `/api/accuracy?cutoff=`, with tests.
 - [ ] **5. React UI (3h):** decision view (forecast vs actual chart, cutoff
       label, coverage) and accuracy view (MAE, RMSE, bias, error distribution).
