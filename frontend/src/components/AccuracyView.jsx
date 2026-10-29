@@ -123,6 +123,11 @@ function AccuracyDetail({ data, stale, onSelectDay }) {
         <StatTile label="RMSE" value={mw(p.rmse_mw)} hint="weights large misses more" />
         <StatTile label="Bias (mean error)" value={signedMw(p.bias_mw)} hint="+ = forecast too high" />
         <StatTile
+          label="Middle 80% of errors"
+          value={p.p10_mw == null ? '—' : `${signedMw(p.p10_mw)} to ${signedMw(p.p90_mw)}`}
+          hint="10th to 90th percentile"
+        />
+        <StatTile
           label="Matched intervals"
           value={`${p.matched_intervals} / ${p.expected_intervals}`}
           hint={`${percent(p.matched_coverage)} of expected hours`}
@@ -164,12 +169,18 @@ function MetricGuide({ errorDefinition }) {
         <dt>Bias</dt>
         <dd>Mean error: a systematic lean. Near 0 means misses cancel out on average.</dd>
       </div>
+      <div>
+        <dt>Middle 80% of errors</dt>
+        <dd>8 in 10 matched hours had an error between these two values (10th and 90th percentiles).</dd>
+      </div>
     </dl>
   )
 }
 
+// X-axis ticks: one per day (thinned to about 10); for a single day, every 3 hours.
 function dayTicks(rows) {
   const midnights = rows.filter((r) => londonTime(r.target_time) === '00:00').map((r) => r.target_time)
+  if (midnights.length <= 1) return rows.filter((_, i) => i % 3 === 0).map((r) => r.target_time)
   const step = Math.max(1, Math.ceil(midnights.length / 10))
   return midnights.filter((_, i) => i % step === 0)
 }
@@ -184,6 +195,7 @@ function mwTicks(intervals) {
 function ActualVsForecastChart({ intervals }) {
   const colours = useChartColors()
   const ticks = dayTicks(intervals)
+  const singleDay = intervals.filter((r) => londonTime(r.target_time) === '00:00').length <= 1
   const yTicks = mwTicks(intervals)
   return (
     <figure className="chart" aria-label="Hourly selected forecast compared with retrospective actual generation, in MW">
@@ -200,7 +212,7 @@ function ActualVsForecastChart({ intervals }) {
           <XAxis
             dataKey="target_time"
             ticks={ticks}
-            tickFormatter={(t) => (ticks.length === 1 ? londonTime(t) : londonDay(t))}
+            tickFormatter={(t) => (singleDay ? londonTime(t) : londonDay(t))}
             tickLine={false}
             stroke={colours.axis}
             tick={{ fill: colours.muted, fontSize: 12 }}
@@ -301,7 +313,10 @@ function DailyBiasChart({ days, onSelectDay }) {
             onClick={(entry) => onSelectDay(entry.payload?.decision_date ?? entry.decision_date)}
           >
             {days.map((d) => (
-              <Cell key={d.decision_date} fill={d.bias_mw >= 0 ? colours.over : colours.under} />
+              <Cell
+                key={d.decision_date}
+                fill={d.bias_mw == null ? colours.muted : d.bias_mw >= 0 ? colours.over : colours.under}
+              />
             ))}
           </Bar>
         </BarChart>

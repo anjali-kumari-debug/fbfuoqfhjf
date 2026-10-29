@@ -141,7 +141,7 @@ to avoid the common defaults 5173 and 8000.
 
 | What | Where to run | Command |
 |---|---|---|
-| Backend tests (108: selection, cutoff boundary, missing data, timezones, metrics, API endpoints and validation, cleaning, retries, pipeline) | `backend/` | `../.venv/bin/python -m pytest` |
+| Backend tests (117: selection, cutoff boundary, missing data, timezones, metrics, API endpoints and validation, cleaning, retries, pipeline) | `backend/` | `../.venv/bin/python -m pytest` |
 | Frontend tests (7: London-time display and day labels, missing values, formatting) | `frontend/` | `npm test` |
 | Frontend lint | `frontend/` | `npm run lint` |
 | Production build | `frontend/` | `npm run build` |
@@ -242,7 +242,7 @@ The build fails with a clear message if there is neither committed data nor
 | `frontend/src/main.jsx` | React entry point |
 | `frontend/src/App.jsx` | Page layout: tabs, cutoff control with its demo-assumption label, method notes |
 | `frontend/src/components/DecisionView.jsx` | Decision view: what was known at the cutoff. January date picker, derived delivery date, forecast-only chart (tooltips show the publish time), coverage, which publication was used, partial and empty states |
-| `frontend/src/components/AccuracyView.jsx` | Accuracy view: decision-date range selector, MAE / RMSE / bias / matched-interval cards with explanations, the retrospective actual-vs-forecast chart, a daily bias chart and table, partial and empty states |
+| `frontend/src/components/AccuracyView.jsx` | Accuracy view: decision-date range selector, MAE / RMSE / bias / middle-80% / matched-interval cards with explanations, the retrospective actual-vs-forecast chart, a daily bias chart and table, partial and empty states |
 | `frontend/src/components/StatTile.jsx`, `ChartTooltip.jsx`, `Notice.jsx` | Shared UI pieces: number cards (with an optional coverage meter), chart tooltips, status messages for partial, empty and error states |
 | `frontend/src/api.js`, `useApi.js` | API URLs and a fetch hook that cancels outdated requests |
 | `frontend/src/format.js` | London-time, MW and percentage formatting ("—" for missing values) |

@@ -363,3 +363,33 @@ def test_load_data_parses_timestamps_as_utc_and_selection_ignores_row_order(tmp_
     table = decision_table(actuals, forecasts, DECISION, TEN)
     assert first_hour(table, "forecast_mw") == 250  # latest by time, not by row position
     assert first_hour(table, "actual_mw") == 200
+
+
+def test_empty_duplicate_forecast_does_not_hide_newest_real_value():
+    # Reviewer's case: newest publication has 5000 and an empty copy for the same hour.
+    f = forecasts_frame(
+        [
+            ("2026-01-01T07:30Z", FIRST_HOUR, 1000),
+            ("2026-01-01T09:30Z", FIRST_HOUR, 5000),
+            ("2026-01-01T09:30Z", FIRST_HOUR, None),
+        ]
+    )
+    table = select_forecasts(f, DECISION, TEN)
+    assert first_hour(table, "forecast_mw") == 5000
+    assert first_hour(table, "publish_time") == pd.Timestamp("2026-01-01T09:30Z")
+
+
+def test_empty_duplicate_actual_does_not_hide_real_value():
+    a = actuals_frame(half_hours(FIRST_HOUR, 100) + [(FIRST_HOUR, None)])
+    assert hourly_actuals(a, pd.DatetimeIndex([pd.Timestamp(FIRST_HOUR)])).iloc[0] == 100
+
+
+@pytest.mark.parametrize(
+    "decision_date, cutoff, expected_utc",
+    [
+        (date(2026, 3, 29), time(1, 30), "2026-03-29T01:30Z"),  # 01:30 does not exist (clocks jump 01:00->02:00)
+        (date(2026, 10, 25), time(1, 30), "2026-10-25T00:30Z"),  # 01:30 happens twice: the first (BST) is used
+    ],
+)
+def test_cutoff_on_clock_change_days_is_well_defined(decision_date, cutoff, expected_utc):
+    assert cutoff_datetime(decision_date, cutoff) == pd.Timestamp(expected_utc)

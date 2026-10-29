@@ -199,6 +199,8 @@ def test_accuracy_metrics_are_null_not_zero_when_nothing_matches(client):
         ("/api/forecast", {"decision_date": "10-01-2026"}, "YYYY-MM-DD"),
         ("/api/forecast", {"decision_date": "2026-01-32"}, "YYYY-MM-DD"),
         ("/api/forecast", {"decision_date": ""}, "YYYY-MM-DD"),
+        ("/api/forecast", {"decision_date": "20260110"}, "YYYY-MM-DD"),  # compact ISO form
+        ("/api/forecast", {"decision_date": "2026-W02-6"}, "YYYY-MM-DD"),  # ISO week date
         ("/api/forecast", {"decision_date": "2026-01-10", "decision_time": "25:00"}, "HH:MM"),
         ("/api/forecast", {"decision_date": "2026-01-10", "decision_time": "10am"}, "HH:MM"),
         ("/api/forecast", {"decision_date": "2026-01-10", "decision_time": "9:00"}, "HH:MM"),

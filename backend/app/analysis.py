@@ -56,7 +56,13 @@ def parse_cutoff(text: str) -> time:
 
 
 def cutoff_datetime(decision_date: date, cutoff: time) -> pd.Timestamp:
-    """Decision cutoff as a UTC timestamp (cutoff is local Europe/London time)."""
+    """Decision cutoff as a UTC timestamp (cutoff is local Europe/London time).
+
+    Clock-change days (never in January): a local time that does not exist
+    (e.g. 01:30 on the spring-forward day) is read with the pre-change offset,
+    and a time that occurs twice (01:30 on the autumn day) uses its first
+    occurrence (BST). This follows Python's zoneinfo rules (fold=0).
+    """
     local = datetime.combine(decision_date, cutoff, tzinfo=LONDON)
     return pd.Timestamp(local).tz_convert("UTC")
 
@@ -83,16 +89,24 @@ def delivery_hours(decision_date: date) -> pd.DatetimeIndex:
 def one_value_per_key(df: pd.DataFrame, key: list[str]) -> pd.DataFrame:
     """At most one generation value per key, without picking arbitrarily.
 
-    Exact duplicates collapse to one row. If a key has conflicting values, there
-    is no principled winner, so its value becomes NaN (missing), never a guess.
+    Exact duplicates collapse to one row. An empty duplicate is missing data, not
+    a competing value, so it never hides a real value. If a key has two or more
+    *different* real values, there is no principled winner, so its value becomes
+    NaN (missing), never a guess.
     """
     df = df.drop_duplicates(subset=[*key, "generation_mw"])
-    conflict = df.duplicated(key, keep=False)
-    if not conflict.any():
+    dup = df.duplicated(key, keep=False)
+    if not dup.any():
         return df
-    resolved = df[conflict].drop_duplicates(key).copy()
-    resolved["generation_mw"] = np.nan
-    return pd.concat([df[~conflict], resolved])
+    groups = df[dup]
+
+    def single_value(s: pd.Series) -> float:
+        values = s.dropna().unique()
+        return float(values[0]) if len(values) == 1 else np.nan
+
+    resolved = groups.drop_duplicates(key).set_index(key)
+    resolved["generation_mw"] = groups.groupby(key, sort=False)["generation_mw"].agg(single_value)
+    return pd.concat([df[~dup], resolved.reset_index()])
 
 
 def select_forecasts(forecasts: pd.DataFrame, decision_date: date, cutoff: time) -> pd.DataFrame:

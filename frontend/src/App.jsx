@@ -71,10 +71,24 @@ function Dashboard({ meta }) {
     <>
       <div className="toolbar">
         <div className="tabs" role="tablist" aria-label="Views">
-          <button type="button" role="tab" aria-selected={tab === 'decision'} onClick={() => setTab('decision')}>
+          <button
+            type="button"
+            role="tab"
+            id="tab-decision"
+            aria-controls="panel"
+            aria-selected={tab === 'decision'}
+            onClick={() => setTab('decision')}
+          >
             Decision view
           </button>
-          <button type="button" role="tab" aria-selected={tab === 'accuracy'} onClick={() => setTab('accuracy')}>
+          <button
+            type="button"
+            role="tab"
+            id="tab-accuracy"
+            aria-controls="panel"
+            aria-selected={tab === 'accuracy'}
+            onClick={() => setTab('accuracy')}
+          >
             Accuracy
           </button>
         </div>
@@ -95,7 +109,7 @@ function Dashboard({ meta }) {
         </div>
       </div>
 
-      <main>
+      <main id="panel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
         {tab === 'decision' ? (
           <DecisionView
             meta={meta}

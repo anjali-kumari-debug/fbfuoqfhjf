@@ -226,22 +226,26 @@ def clean_actuals(rows: list[dict], window_start: datetime, window_end: datetime
 
 
 def _resolve_actual_conflicts(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+    """One row per start_time. Empty copies never compete with a real value; only
+    different real values are conflicts (resolved by a later revision, else missing)."""
     dup = df["start_time"].duplicated(keep=False)
     groups = df[dup]
-    values_per_key = groups.groupby("start_time")["generation_mw"].nunique(dropna=False)
+    values_per_key = groups.groupby("start_time")["generation_mw"].nunique()  # ignores NaN
     conflicts = groups[groups["start_time"].isin(values_per_key[values_per_key > 1].index)]
     report = {"conflicting_start_times": int(conflicts["start_time"].nunique())}
 
     resolved = []
     revisions = unresolved = 0
-    for start, group in groups.groupby("start_time"):
-        if group["generation_mw"].nunique(dropna=False) <= 1:
-            # Same value repeated (e.g. republished): not a conflict, keep the latest copy.
-            resolved.append(group.sort_values("publish_time", na_position="first").iloc[[-1]])
+    for _, group in groups.groupby("start_time"):
+        valued = group[group["generation_mw"].notna()]
+        if valued["generation_mw"].nunique() <= 1:
+            # One real value (possibly repeated, possibly with empty copies), or none at all.
+            pick = valued if len(valued) else group
+            resolved.append(pick.sort_values("publish_time", na_position="first").iloc[[-1]])
             continue
-        known = group.dropna(subset=["publish_time"])
-        if len(known) and known["publish_time"].nunique() == len(known) and len(known) == len(group):
-            resolved.append(known.sort_values("publish_time").iloc[[-1]])  # latest revision wins
+        known = valued.dropna(subset=["publish_time"])
+        if len(known) == len(valued) and known["publish_time"].nunique() == len(known):
+            resolved.append(known.sort_values("publish_time").iloc[[-1]])  # latest real revision wins
             revisions += 1
         else:
             row = group.iloc[[0]].copy()
@@ -293,13 +297,19 @@ def clean_forecasts(rows: list[dict], window_start: datetime, window_end: dateti
 
     key = ["publish_time", "start_time"]
     dup = out.duplicated(key, keep=False)
-    conflicts = out[dup]
-    report["conflicting_keys_set_to_missing"] = int(conflicts.groupby(key).ngroups) if len(conflicts) else 0
+    groups = out[dup]
+    # Empty copies are missing data, not competing values; only different real values conflict.
+    real_values = groups.groupby(key)["generation_mw"].nunique() if len(groups) else pd.Series(dtype=int)
+    conflict_keys = real_values[real_values > 1].index
+    conflicts = groups[groups.set_index(key).index.isin(conflict_keys)] if len(groups) else groups
+    report["conflicting_keys_set_to_missing"] = len(conflict_keys)
     report["conflict_examples"] = _conflict_examples(conflicts, key)
-    if len(conflicts):
-        merged = conflicts.drop_duplicates(key).copy()
-        merged["generation_mw"] = np.nan
-        out = pd.concat([out[~dup], merged])
+    if len(groups):
+        merged = groups.drop_duplicates(key).set_index(key)
+        merged["generation_mw"] = groups.groupby(key)["generation_mw"].agg(
+            lambda s: s.dropna().iloc[0] if s.dropna().nunique() == 1 else np.nan
+        )
+        out = pd.concat([out[~dup], merged.reset_index()])
 
     out = out[(out["start_time"] >= window_start) & (out["start_time"] < window_end)]
     out = out.sort_values(key).reset_index(drop=True)

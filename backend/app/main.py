@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import date, time, timedelta
@@ -109,7 +110,10 @@ def parse_decision_time(text: str) -> time:
 
 
 def parse_decision_date(text: str, name: str) -> date:
+    # Python's fromisoformat also accepts 20260110 and 2026-W02-6; require exactly YYYY-MM-DD.
     try:
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+            raise ValueError
         d = date.fromisoformat(text)
     except ValueError:
         raise HTTPException(status_code=422, detail=f"{name} must be a date in YYYY-MM-DD format, got {text!r}") from None

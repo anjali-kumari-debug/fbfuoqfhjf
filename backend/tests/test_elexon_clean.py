@@ -186,3 +186,24 @@ def test_forecasts_outside_delivery_window_are_dropped():
     ]
     df, _ = clean_forecasts(rows, START, END)
     assert df["generation_mw"].tolist() == [2]
+
+
+def test_actuals_empty_later_copy_does_not_overwrite_a_real_value():
+    # Reviewer's case: 15000 published 00:30, then an empty row published 01:00.
+    rows = [
+        actual("2026-01-02T00:00:00Z", 15000, publish="2026-01-02T00:30:00Z"),
+        actual("2026-01-02T00:00:00Z", None, publish="2026-01-02T01:00:00Z"),
+    ]
+    df, report = clean_actuals(rows, START, END)
+    assert df["generation_mw"].tolist() == [15000]
+    assert report["conflicting_start_times"] == 0  # an empty copy is not a competing value
+
+
+def test_forecasts_empty_duplicate_does_not_hide_a_real_value():
+    rows = [
+        forecast("2026-01-01T09:30:00Z", "2026-01-02T00:00:00Z", 5000),
+        forecast("2026-01-01T09:30:00Z", "2026-01-02T00:00:00Z", None),
+    ]
+    df, report = clean_forecasts(rows, START, END)
+    assert df["generation_mw"].tolist() == [5000]
+    assert report["conflicting_keys_set_to_missing"] == 0
