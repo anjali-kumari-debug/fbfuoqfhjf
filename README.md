@@ -1,301 +1,376 @@
 # Wind Forecast Desk
 
-A web app for a UK utility's day-ahead trading team. For every purchase decision
-in January 2026 it shows:
-
-1. **The latest wind generation forecast that was available at the decision
-   cutoff.** It never uses a forecast published later.
-2. **How accurate those forecasts were**, scored against actual generation:
-   MAE, RMSE, bias and error percentiles, with data coverage.
-
-Data: Elexon BMRS **WINDFOR** (wind forecasts, with every historical
-publication) and **FUELHH** (actual generation, `fuelType = WIND`). No other
-data is used.
-
 **Live app:** https://fbfuoqfhjf.vercel.app  
-**Repository:** https://github.com/anjali-kumari-debug/fbfuoqfhjf
+**Repository:** https://github.com/anjali-kumari-debug/fbfuoqfhjf  
+**Demo video:** _to be added (unlisted YouTube link)_
 
----
+> **Status: pilot / demo.** This is a first version built for a recruitment
+> challenge. It is not production-ready. It has no authentication, monitoring
+> or alerting, it uses a fixed January 2026 data snapshot, and the decision
+> time is an assumption, not a verified market rule.
 
-## Key results (January 2026 decisions, 10:00 cutoff)
+## 1. Business problem
 
-| Metric | Value |
+A UK electricity supplier's day-ahead trading team must buy power one day
+before delivery. Wind output is weather-dependent, so they rely on wind
+generation forecasts to judge how much other generation they need. Two
+questions matter at decision time:
+
+1. **What was the latest wind forecast available when the decision had to be
+   made?** Only forecasts published at or before the decision time count.
+2. **How accurate have those forecasts been?** The team can then decide with
+   the size and direction of the typical error in mind.
+
+This app answers both questions for every decision date in January 2026, using
+national wind data from Elexon only.
+
+**Not provided:** demand data, purchase recommendations or procurement volumes.
+The app reports forecasts and their errors; it is **not** a calculator for how
+much power to buy.
+
+## 2. Results at a glance (January 2026 decisions, 10:00 decision time)
+
+| Measure | Value |
 |---|---|
-| Coverage | 744 of 744 delivery hours scored (100%) |
+| Coverage | 744 of 744 delivery hours matched (100%) |
 | MAE | 2,013 MW |
 | RMSE | 2,506 MW |
-| Bias (mean error) | **+1,730 MW**: forecasts were consistently higher than actual output |
-| Middle 80% of errors | -489 MW to +4,144 MW |
+| Bias (mean error) | **+1,730 MW**: forecasts were higher than actual output in most hours |
+| Middle 80% of errors | −489 MW to +4,144 MW |
+| Skill vs a naive persistence baseline | about 53% lower MAE (on the 720 hours where the baseline exists) |
 
-The forecast beats a naive persistence baseline by about 53% on MAE, but about
-half of its squared error is this constant over-forecast. A later cutoff
-(16:00) reduces MAE to about 1,870 MW. The full evaluation, with metric
-definitions and suggested improvements, is in
-[docs/evaluation.md](docs/evaluation.md). With a cutoff before
-02:30, the newest forecast doesn't yet cover the last 2 hours of the delivery
-day, so coverage drops to 91.7%. The app reports this instead of filling in
-those hours.
+More detail, with breakdowns and interpretation, is in
+[docs/evaluation.md](docs/evaluation.md). These figures describe one winter
+month (see Known limitations).
 
-## How it works
+## 3. Scope and decision rules
 
 | Rule | Implementation |
 |---|---|
-| Decision date | Every day from 1 to 31 Jan 2026 |
-| Delivery day | The Europe/London calendar day after the decision date (2 Jan to 1 Feb) |
-| Cutoff | Configurable in the UI. **10:00 London is a demo assumption, not a market rule.** |
-| Forecast choice (no look-ahead) | For each delivery hour, the forecast with the latest `publishTime` at or before the cutoff. The selection function never receives actuals. |
-| Resolution mismatch | Forecasts are hourly; actuals are half-hourly. Each hour's actual is the mean of its two half-hours. If either half-hour is missing, the hour is missing. Nothing is interpolated. |
-| Missing data | Kept as `null` (shown as a gap or "—") and counted in coverage, per day and overall. Never filled with 0. |
-| Error | `error = forecast - actual` (MW); positive = over-forecast. MAPE is not used because wind output can be near zero. |
-| Timezones | All API timestamps are parsed as UTC and converted to Europe/London for day boundaries and display. Clock-change days (23 or 25 hours) are handled and tested. |
+| Decision dates | Every calendar day from **1 to 31 January 2026** |
+| Delivery day | The **next Europe/London calendar day** after the decision date. Delivery days therefore run from 2 January to **1 February 2026**. Actuals for 1 February are included so that 31 January decisions can be scored. |
+| Decision time (cutoff) | **Configurable** in the UI and API (`decision_time`, HH:MM, Europe/London). The default **10:00 is a demo assumption, not a verified market rule.** |
+| Forecast selection | For each delivery hour, the forecast with the **latest `publishTime` at or before the decision cutoff**. A forecast published even one minute later is never used. Publications from before January (from 28 December 2025) are kept, so early-January decisions can use late-December forecasts. The selection code never receives actuals. |
+| Month-wide analysis | Each decision date uses **its own cutoff** and its own next-day delivery hours (not one month-end cutoff). |
+| Resolution mismatch | Forecasts are hourly; actuals are half-hourly. Each hour's actual is the **mean of its two half-hours**. If either half-hour is missing, the hour is missing. Nothing is interpolated. |
+| Missing data | Kept as `null` (shown as a gap or "—"), never replaced with 0, and reported as coverage |
+| Timezones | All API timestamps are parsed as timezone-aware UTC and converted to Europe/London for day boundaries and display. Clock-change days (23 or 25 hours) are handled and tested, although January has none. |
 
-**Data scope caveat:** according to Elexon's documentation, both datasets cover
-wind farms with operational metering on the transmission network. Embedded
-wind is excluded, and metered wind is about 82% of GB wind according to NESO.
-So these figures are **not total GB wind output**. See
-[docs/data-notes.md](docs/data-notes.md) for the verified API details, data
-limitations and comparability notes.
+Example: with a decision time before 02:30, the newest available forecast does
+not yet cover the last 2 hours of the delivery day. Coverage then drops to
+22 of 24 hours, and the app shows those hours as missing.
 
-## Architecture
+## 4. Metric definitions
+
+`error = forecast − actual` (MW). **Positive means over-forecast.**
+
+Metrics use **matched intervals only** (hours with both a selected forecast
+and an actual). With no matched intervals, every metric is `null`, not 0.
+
+| Metric | Definition |
+|---|---|
+| MAE | mean(\|error\|): the typical size of a miss |
+| RMSE | √mean(error²): penalises large misses more |
+| Bias | mean(error): a systematic lean (positive = forecast too high) |
+| Percentiles | P10 to P90 of the errors; also the P90 of \|error\| ("9 in 10 hours missed by less") |
+| Skill vs baseline | 1 − MAE(forecast) ÷ MAE(persistence), on the same hours. The persistence baseline is the latest actual *published* by the cutoff, assumed to continue all day. |
+| Coverage | Four counts reported separately: **expected** intervals (hours in the delivery day), intervals with a **selected forecast**, intervals with an **actual**, and **matched** intervals (both). Ratios are count ÷ expected. |
+
+MAPE is not used, because wind output can be close to zero.
+
+## 5. Architecture
 
 ```
-Elexon API ──(python -m backend.app.fetch_data, run once)──▶ data/raw/      (original responses, gitignored)
-                                                             data/processed/ (normalised CSV + manifest)
-                                                                   │
+Elexon API ──(python -m backend.app.fetch_data, run once)──▶ data/raw/        original responses (gitignored)
+                                                             data/processed/  normalised CSVs + manifest (committed)
+                                                                   │  loaded once at startup
                                                                    ▼
-Browser ◀── React (built static files) ◀── FastAPI ── app/analysis.py (selection, metrics)
-                 └──────── /api/* JSON ────────┘
+Browser ◀── React build (static files) ◀── FastAPI ── backend/app/analysis.py (selection, alignment, metrics)
+                 └──────────── /api/* JSON ─────────────┘
 ```
 
-- **One service.** FastAPI serves both the JSON API (`/api/...`) and the built
-  React app (`/`). The same app runs in one Docker image locally and as one
-  Vercel Function in production (the React build is served from Vercel's CDN).
-- **Offline data preparation.** One command fetches, preserves, validates and
-  documents the data. The app reads only `data/processed/` and **never calls
-  Elexon at request time**, so the demo is reproducible.
-- **Pure core logic.** `backend/app/analysis.py` contains no web code, which
-  makes the forecast-selection and metric rules easy to test.
+- **One service.** FastAPI serves the JSON API (`/api/...`) and the built React
+  app (`/`). It runs as one Docker image locally, and as one Vercel Python
+  function in deployment (Vercel serves the React files from its CDN).
+- **No calls to Elexon at request time.** The app reads only
+  `data/processed/`, loaded once at startup. If those files are missing,
+  startup fails with instructions to run the data pipeline.
+- **Logic kept separate from web code.** `backend/app/analysis.py` (selection,
+  alignment, metrics) has no web code; `backend/app/main.py` only validates
+  input and shapes JSON.
 
 ### API
 
-All dates are **decision dates**. Times are Europe/London. `decision_time`
-defaults to `10:00`, a demo assumption rather than a market rule.
+All dates are **decision dates**; times are Europe/London; `decision_time`
+defaults to `10:00`. Interactive docs are at `/docs`.
 
 | Endpoint | Returns |
 |---|---|
 | `GET /api/health` | `{"status": "ok"}` |
-| `GET /api/forecast?decision_date=2026-01-10&decision_time=10:00` | Decision cutoff with its timezone offset (and in UTC), delivery date, and for each hourly interval: target time, selected forecast, its publish time, the retrospective actual, the error (only for matched intervals) and the lead time. Also coverage, that day's metrics, and `recent_errors`: the forecast's track record over the previous 7 decisions (bias, MAE, P10/P90, P90 miss), using only actuals published by the cutoff. |
-| `GET /api/accuracy?start_date=2026-01-01&end_date=2026-01-31&decision_time=10:00` | Pooled MAE, RMSE, bias and percentiles over all matched intervals; a daily table with each date's own cutoff, metrics and coverage; expected / forecast / actual / matched interval counts; the error sign definition; the decision-time assumption; skill against a naive persistence baseline (the latest actual published by each cutoff, compared on the same hours); breakdowns by time of day and by actual wind level; an error histogram. `start_date` and `end_date` default to the whole of January. |
-| `GET /api/accuracy/decision-times?start_date=&end_date=` | The same decision dates scored at 00:00, 02:30, 06:00, 10:00, 12:30, 16:00 and 20:00: coverage, MAE, RMSE, bias and P90 miss for each |
-| `GET /api/meta` | Decision-date range, default decision time and its label, method notes, data retrieval date, attribution |
+| `GET /api/forecast?decision_date=2026-01-10&decision_time=10:00` | The cutoff (with timezone offset, and in UTC) and the delivery date. For each hour: target time, selected forecast, its publish time, the retrospective actual, and the error (only for matched hours). Also coverage, that day's metrics, and the forecast's recent error record over the previous 7 decisions (using only actuals published by the cutoff). |
+| `GET /api/accuracy?start_date=2026-01-01&end_date=2026-01-31&decision_time=10:00` | Pooled metrics and coverage; a daily table (each date with its own cutoff); the hourly forecast-vs-actual series; skill vs the persistence baseline; breakdowns by time of day and actual wind level; an error histogram; the error-sign definition and the decision-time assumption |
+| `GET /api/accuracy/decision-times?start_date=&end_date=` | The same decision dates scored at 00:00, 02:30, 06:00, 10:00, 12:30, 16:00 and 20:00 |
+| `GET /api/meta` | Date range, default decision time and its label, method notes, data retrieval date, attribution |
 
-- **Coverage counts are reported separately:** `expected_intervals`,
-  `forecast_intervals`, `actual_intervals` and `matched_intervals`. Metrics use
-  matched intervals only, and are `null` when there are none.
-- **Bad input gets HTTP 422 with a specific message:** dates outside
-  January 2026, malformed dates, invalid times (for example `25:00` or `9:00`),
-  `start_date` after `end_date`, and a missing `decision_date`.
-- **Data loading:** the processed data is loaded **once at startup**. If a
-  required file is missing, startup stops with instructions to run the data
-  pipeline. No request ever calls Elexon.
-- Routes (`app/main.py`) only validate input and shape JSON. Selection,
-  alignment and metrics live in `app/analysis.py`.
-- Interactive API docs are at `/docs`.
+Invalid input gets HTTP 422 with a specific message. Examples: dates outside
+January 2026, malformed dates, times such as `25:00` or `9:00`, and
+`start_date` after `end_date`.
 
-## Running it
+## 6. Prerequisites
 
-Prerequisites: Python 3.13, Node.js 22+, Docker (optional).
+- **Python 3.13** (for the backend and the data pipeline)
+- **Node.js 20.19+ or 22.12+, with npm** (Vite's requirement; the frontend build)
+- **Docker** (optional; for Option A)
+- A Unix-like shell (macOS or Linux). The commands below use `.venv/bin/...` paths.
 
-### Option A: Docker (one image with the UI and API)
+## 7. Running it
 
-From the project root:
+### Option A: Docker
+
+From the repository root:
 
 ```bash
 docker build -t wind-forecast-desk .
 docker run --rm -p 8090:8000 wind-forecast-desk
 ```
 
-Open http://localhost:8090. Every view has a shareable URL (for example
-`/?view=accuracy&time=16:00&start=2026-01-10&end=2026-01-20`); use **Copy link to this view**. The container listens on `$PORT` (default 8000),
-as most container platforms expect.
+Open http://localhost:8090. The container listens on `$PORT` (default 8000).
 
-### Option B: local development (two terminals)
+### Option B: local backend and frontend (two terminals)
 
-From the project root, set up once:
+One-time setup, from the repository root:
 
 ```bash
 python3.13 -m venv .venv
 .venv/bin/pip install -r backend/requirements.txt
-(cd frontend && npm ci)
+cd frontend && npm ci && cd ..
 ```
 
-Terminal 1, the backend (from `backend/`):
+Terminal 1, the backend, from `backend/`:
 
 ```bash
+cd backend
 ../.venv/bin/uvicorn app.main:app --reload --port 8001
 ```
 
-Terminal 2, the frontend (from `frontend/`):
+Terminal 2, the frontend, from `frontend/`:
 
 ```bash
+cd frontend
 npm run dev
 ```
 
-Open http://localhost:5180. The Vite dev server forwards `/api` to port 8001;
-set `API_PORT` to use a different backend port. Ports 5180 and 8001 were chosen
-to avoid the common defaults 5173 and 8000.
+Open http://localhost:5180. The Vite dev server forwards `/api` to port 8001
+(set `API_PORT` to use another). Ports 5180 and 8001 avoid the common defaults
+5173 and 8000.
 
-### Tests and checks
+Every view has a shareable URL, for example
+`/?view=accuracy&time=16:00&start=2026-01-10&end=2026-01-20`. Use the **Copy
+link to this view** button.
 
-| What | Where to run | Command |
+## 8. Tests
+
+| What | Run from | Command |
 |---|---|---|
-| Backend tests (139: selection, cutoff boundary, missing data, timezones, metrics, API endpoints and validation, cleaning, retries, pipeline) | `backend/` | `../.venv/bin/python -m pytest` |
-| Frontend tests (11: London-time display and day labels, missing values, formatting, shareable-link parsing) | `frontend/` | `npm test` |
+| Backend tests (139) | `backend/` | `../.venv/bin/python -m pytest` |
+| Frontend tests (11) | `frontend/` | `npm test` |
 | Frontend lint | `frontend/` | `npm run lint` |
-| Production build | `frontend/` | `npm run build` |
-| Tests inside the Docker image | anywhere | `docker run --rm wind-forecast-desk python -m pytest -q -p no:cacheprovider` |
+| Frontend build | `frontend/` | `npm run build` |
+| Backend tests inside the Docker image | anywhere, after `docker build` | `docker run --rm wind-forecast-desk python -m pytest -q -p no:cacheprovider` |
 
-## Data preparation pipeline
+**Backend tests cover:**
+- forecast selection, including the exact cutoff boundary (a forecast at
+  10:00 is used, at 10:01 it is not), a later ineligible forecast, and
+  multiple eligible forecasts;
+- missing forecasts and actuals, real zero generation, and no matched
+  intervals;
+- the 31 January → 1 February delivery boundary, and clock-change days;
+- duplicates and conflicting rows;
+- MAE, RMSE and bias, against hand-calculated examples;
+- the API endpoints and input validation;
+- data cleaning, API retries, and the pipeline (against a fake API);
+- the evaluation metrics.
 
-From the repository root (with the virtual environment active, or using
-`.venv/bin/python`):
+**Frontend tests cover** formatting (London time, missing values shown as "—")
+and shareable-link parsing. There are no automated browser/UI tests.
 
-```bash
-python -m backend.app.fetch_data --decision-month 2026-01
-```
+The pytest run prints one known, harmless warning: a deprecation notice from
+Starlette's test client about `httpx`.
 
-| Step | Behaviour |
-|---|---|
-| Date ranges | Worked out from the month. Delivery days are 2 Jan to 1 Feb. Forecast publications are fetched from 28 Dec, 4 days before the first decision (`--lookback-days`), to the end of 31 Jan. Actuals cover settlement dates 1 Jan to 2 Feb. |
-| Requests | 7-day chunks, a 60 s timeout, and up to 4 attempts on timeouts, connection errors, 429 and 5xx, with waits that double each time (capped). Client errors such as 400 fail immediately. |
-| Raw preservation | Each response body is saved unchanged to `data/raw/<month>/` (gitignored), with its SHA-256 in the manifest. |
-| Normalisation | FUELHH is filtered to `WIND`. Timestamps are timezone-aware and written as UTC `...Z`. Older publications are kept, because filtering is on the target hour, not the publish time. |
-| Validation | Unparseable timestamps, or timestamps off the 30-minute / hourly grid, are removed and counted. Non-numeric and non-finite MW values become missing and are counted; negative values are flagged. Settlement date and period are checked against `startTime`. |
-| Duplicates | Exact duplicates are removed. **Conflicting duplicates are reported in the manifest.** A conflicting actual is resolved only by a later revision (a later `publishTime`); otherwise the value is set to missing, never picked arbitrarily. |
-| Missing data | Preserved as empty values; nothing is filled or interpolated. |
-| Outputs | `data/processed/actuals.csv`, `forecasts.csv` and `manifest.json`. The manifest records the source URLs, every request with its range and retrieval time, row counts, cleaning counts, actual and forecast coverage, the assumptions, and file fingerprints. |
+## 9. Data: sources, attribution and reproduction
 
-For January 2026: 10 requests; 1,584 → 1,488 actual rows; 20,440 → 17,864
-forecast rows from 256 publications. There were no duplicates, conflicts or
-invalid values, and 100% actual and forecast coverage.
+### Source datasets (Elexon Insights Solution / BMRS)
 
-## Data licence and attribution
+| Dataset | API endpoint used | Documentation |
+|---|---|---|
+| Actual generation, `fuelType = WIND` (FUELHH) | `https://data.elexon.co.uk/bmrs/api/v1/datasets/FUELHH/stream` | https://bmrs.elexon.co.uk/api-documentation/endpoint/datasets/FUELHH/stream |
+| Wind generation forecast (WINDFOR) | `https://data.elexon.co.uk/bmrs/api/v1/datasets/WINDFOR/stream` | https://bmrs.elexon.co.uk/api-documentation/endpoint/datasets/WINDFOR/stream |
 
-Contains BMRS data © Elexon Limited copyright and database right 2026.
-[Licence](https://www.elexon.co.uk/data/balancing-mechanism-reporting-agent/copyright-licence-bmrs-data/).
+Verified endpoint details, field meanings and data observations are in
+[docs/data-notes.md](docs/data-notes.md).
+
+**Attribution:** Contains BMRS data © Elexon Limited copyright and database
+right 2026. Licence:
+https://www.elexon.co.uk/data/balancing-mechanism-reporting-agent/copyright-licence-bmrs-data/.
 This project is not endorsed by Elexon.
 
-The processed January 2026 data (about 1 MB) is committed so that the demo and
-tests are reproducible. Elexon's BMRS open-data licence, as summarised by
-Elexon, allows copying, adaptation and commercial re-use **with this
-attribution**. The attribution appears here, in `data/README.md`, in the
-manifest and in the app footer.
+The processed January data (about 1 MB) is committed so that the demo and tests
+are reproducible. Elexon's BMRS open-data licence is understood to allow reuse
+with this attribution. Its full text could not be retrieved automatically, so
+the wording should be confirmed on the licence page above.
 
-If redistribution were not suitable, nothing else changes: delete
-`data/processed/` from the repository and build the image with
-`DECISION_MONTH`. The data is then fetched once at build time (see Deployment).
+### Reproducing the data snapshot
 
-## Deployment (Vercel)
+From the repository root:
 
-Vercel runs the FastAPI app as a Python function and serves the built React app
-from its CDN. Docker is not used on Vercel; it remains the way to run the
-production setup locally.
+```bash
+.venv/bin/python -m backend.app.fetch_data --decision-month 2026-01
+```
+
+What the command does:
+
+- **Requests:**
+  - WINDFOR publications from 28 December 2025 to the end of 31 January, and
+    FUELHH WIND actuals for settlement dates 1 January to 2 February;
+  - 7-day chunks, a 60-second timeout, and up to 4 attempts on timeouts,
+    429 and 5xx errors.
+- **Raw files:** every original response is saved unchanged in
+  `data/raw/2026-01/` (gitignored), with its SHA-256 in the manifest.
+- **Cleaning:**
+  - FUELHH is filtered to `WIND`, and all times are stored as UTC;
+  - exact duplicates are removed; conflicting duplicates are reported, never
+    picked arbitrarily;
+  - invalid values become missing and are counted.
+- **Outputs:** `data/processed/actuals.csv`, `forecasts.csv` and
+  `manifest.json` (sources, request ranges, retrieval times, row counts,
+  cleaning counts, coverage, assumptions).
+
+For January 2026 the pipeline made 10 requests:
+
+- **Actuals:** 1,584 rows → 1,488.
+- **Forecasts:** 20,440 rows → 17,864, from 256 publications.
+- **Quality:** no duplicates, conflicts or invalid values; 100% actual
+  coverage.
+
+## 10. Deployment (Vercel)
+
+The live app runs on Vercel. Vercel does not use the Dockerfile; it runs the
+FastAPI app as a Python function and serves the React build from its CDN.
 
 | File | Role |
 |---|---|
-| `pyproject.toml` | `[tool.vercel] entrypoint = "backend.app.main:app"`, plus the runtime dependencies only |
+| `pyproject.toml` | `[tool.vercel] entrypoint = "backend.app.main:app"` and the runtime dependencies |
 | `.python-version` | Python 3.13 |
-| `vercel.json` | Build command (`cd frontend && npm ci && npm run build`), and keeps `node_modules`, tests, raw data and docs out of the function bundle |
-| `.vercelignore` | Keeps local-only and private files (virtual env, raw data, challenge document) from being uploaded |
+| `vercel.json` | Build command (`cd frontend && npm ci && npm run build`) and files kept out of the function bundle |
+| `.vercelignore` | Keeps local-only and private files from being uploaded |
 
-The processed data in `data/processed/` is included in the function and loaded
-once at startup. No request calls Elexon.
+The Vercel project is connected to the GitHub repository; pushes to `main`
+redeploy it. Manual deploy, from the repository root after `npx vercel login`:
+`npx vercel deploy --prod`.
 
-The project is connected to the GitHub repository, so every push to `main`
-redeploys production automatically. To deploy manually from the project root
-(after `npx vercel login`):
+## 11. Performance
 
-```bash
-npx vercel deploy --prod
-```
+No performance benchmarks are recorded in this repository.
 
-If redistributing the processed data were not allowed, remove
-`data/processed/` from the repository and make the build command run the
-pipeline first, adding `httpx` to `pyproject.toml`:
-`python -m backend.app.fetch_data --decision-month 2026-01 && cd frontend && npm ci && npm run build`.
+## 12. Known limitations
 
-## Files and directories
+- **One month, one season.** Results cover January 2026 only (744 delivery
+  hours). Days are not independent, so treat percentages as indicative.
+- **Not total GB wind.** Per Elexon's documentation, both datasets cover wind
+  farms with operational metering on the transmission network. Embedded wind
+  is excluded; NESO estimates metered wind at about 82% of GB wind.
+- **Comparability assumptions:**
+  - The hourly actual is the mean of two half-hours. It is not verified
+    whether a WINDFOR value represents an hourly average or the value at the
+    start of the hour.
+  - Elexon's documented publication times differ from the observed
+    `publishTime` values by one hour; the app uses the observed values.
+- **Cause of the bias is unknown.** The forecasts ran about 1.7 GW high on
+  average. Possible causes, such as curtailment or scope differences, are not
+  verified.
+- **Decision time is an assumption.** 10:00 Europe/London is a demo default,
+  not a verified market cutoff; the market timetable is not modelled.
+- **No demand data.** The app cannot and does not suggest purchase volumes.
+- **Fixed snapshot.** The app does not update itself. New data needs a pipeline
+  run and a redeploy.
+- **Pilot quality.** No authentication, monitoring or automated browser tests.
+
+## 13. Repository contents
 
 | Path | Purpose |
 |---|---|
 | `README.md` | This file |
-| `CLAUDE.md` | Project rules and conventions used while building (data rules, stack, workflow) |
-| `Dockerfile` | Multi-stage build: Node builds the React app, then a Python image serves it with FastAPI (optional build-time data fetch with `DECISION_MONTH`) |
+| `CLAUDE.md` | Project rules used while building (data rules, stack, workflow) |
+| `Dockerfile` | Multi-stage build: Node builds the React app; Python serves it and the API with FastAPI. Optional build-time data fetch with `DECISION_MONTH`. |
 | `.dockerignore` | Keeps local-only files (virtual env, `node_modules`, raw data, secrets) out of the image |
-| `pyproject.toml` | Vercel entrypoint and runtime dependencies |
-| `.python-version` | Python version for Vercel (3.13) |
-| `vercel.json` | Vercel build command and function bundle exclusions |
-| `.vercelignore` | Files never uploaded to Vercel |
-| `.gitignore` | Excludes virtual envs, `node_modules`, caches, `.env` files, `frontend/dist`, `data/raw` and the private challenge document |
+| `pyproject.toml`, `.python-version`, `vercel.json`, `.vercelignore` | Vercel deployment configuration (see section 10) |
+| `.gitignore` | Excludes virtual envs, `node_modules`, caches, `.env` files, `frontend/dist`, `data/raw`, `.vercel` and the private challenge document |
 | **backend/** | |
-| `backend/requirements.txt` | Pinned Python dependencies |
+| `backend/requirements.txt` | Pinned Python dependencies (development and Docker) |
 | `backend/pytest.ini` | pytest configuration |
-| `backend/app/main.py` | FastAPI routes: input validation, loading the data once at startup, JSON endpoints, serving the built frontend |
+| `backend/app/__init__.py` | Marks `app` as a Python package |
+| `backend/app/main.py` | FastAPI routes: input validation, loading data once at startup, JSON responses, serving the built frontend |
+| `backend/app/analysis.py` | Core logic: delivery-day hours, forecast selection at the cutoff, hourly alignment, coverage, metrics, recent error record, persistence baseline, breakdowns |
 | `backend/app/serialize.py` | Converts pandas/numpy values to JSON-safe values (NaN becomes `null`, timestamps become UTC strings) |
-| `backend/app/analysis.py` | Core logic: delivery-day hours, forecast selection at the cutoff, hourly alignment, coverage, metrics |
-| `backend/app/elexon.py` | Elexon API client (bounded chunks, timeouts, bounded retries) and cleaning (WIND filter, UTC parsing, validation, duplicate and conflict handling) |
-| `backend/app/evaluate.py` | Evaluation CLI (`python -m backend.app.evaluate`): extended metrics, persistence baseline and skill, breakdowns, a no-look-ahead bias-correction what-if |
-| `backend/app/fetch_data.py` | Data pipeline CLI (`python -m backend.app.fetch_data --decision-month 2026-01`): plans ranges, fetches, preserves raw, cleans, writes processed CSVs and the manifest |
-| `backend/tests/test_analysis.py` | Tests for selection, cutoff boundary, missing data, timezones and clock changes, 31 Jan → 1 Feb, metrics, plus checks on the real processed data |
-| `backend/tests/test_api.py` | Endpoint tests: required fields, cutoff with timezone, separate coverage counts, pooled vs daily metrics, null metrics, 422 validation, loading once at startup, clear failure when data is missing, static frontend |
-| `backend/tests/test_elexon_clean.py` | Cleaning tests: WIND filter, exact duplicates vs conflicts, validation, grid checks, older publications kept, missing values |
-| `backend/tests/test_evaluate.py` | Evaluation tests: hand-calculated metrics, matched pairs only, skill score, baseline and correction without look-ahead |
-| `backend/tests/test_fetch_data.py` | Pipeline tests against a fake API: date planning, retries and their limits, raw files preserved byte for byte, chunk sizes, manifest, coverage without filling gaps |
+| `backend/app/elexon.py` | Elexon API client (bounded chunks, timeouts, bounded retries) and cleaning |
+| `backend/app/fetch_data.py` | Data pipeline command (section 9) |
+| `backend/app/evaluate.py` | Evaluation command, `python -m backend.app.evaluate`: extended metrics, baseline skill, breakdowns, a no-look-ahead bias what-if (analysis only, not used by the app) |
+| `backend/tests/test_analysis.py` | Selection, cutoff boundary, missing data, zero generation, timezones, 31 Jan → 1 Feb, duplicates, metrics, recent error record, baseline, breakdowns |
+| `backend/tests/test_api.py` | Endpoints, validation (422), null metrics, loading once at startup, failure when data is missing |
+| `backend/tests/test_elexon_clean.py` | Cleaning: WIND filter, duplicates vs conflicts, validation, older publications kept |
+| `backend/tests/test_fetch_data.py` | Pipeline against a fake API: date planning, retries, raw files preserved byte for byte, manifest, coverage |
+| `backend/tests/test_evaluate.py` | Evaluation metrics, skill score, baseline and correction without look-ahead |
 | **frontend/** | |
+| `frontend/README.md` | Frontend commands |
 | `frontend/package.json`, `package-lock.json` | Node dependencies (React, Recharts, Vite) and scripts |
-| `frontend/vite.config.js` | Vite config: dev port 5180, `/api` proxy to the backend |
-| `frontend/index.html` | HTML entry page |
-| `frontend/src/main.jsx` | React entry point |
-| `frontend/src/App.jsx` | Page layout: tabs, cutoff control with its demo-assumption label, method notes |
-| `frontend/src/components/DecisionView.jsx` | Decision view: what was known at the cutoff. January date picker, derived delivery date, forecast chart (tooltips show the publish time) with a likely-actual-range band from recent errors, recent bias and P90-miss cards, coverage, which publication was used, partial and empty states |
-| `frontend/src/components/AccuracyView.jsx` | Accuracy view: decision-date range selector, MAE / RMSE / bias / middle-80% / matched-interval cards with explanations, the retrospective actual-vs-forecast chart, a daily bias chart and table, a skill-vs-baseline card, breakdowns by time of day and wind level, an accuracy-by-decision-time table, partial and empty states |
-| `frontend/src/components/StatTile.jsx`, `ChartTooltip.jsx`, `Notice.jsx` | Shared UI pieces: number cards (with an optional coverage meter), chart tooltips, status messages for partial, empty and error states |
-| `frontend/src/api.js`, `useApi.js` | API URLs and a fetch hook that cancels outdated requests |
-| `frontend/src/format.js` | London-time, MW and percentage formatting ("—" for missing values) |
-| `frontend/src/format.test.js` | Tests for `format.js` |
-| `frontend/src/urlState.js`, `urlState.test.js` | Shareable links: view, decision date, decision time and range in the URL (invalid values fall back to defaults), plus tests |
-| `frontend/src/theme.js` | Chart colours for light and dark mode, checked for colour-blind separation |
-| `frontend/src/App.css`, `index.css` | Styles |
-| `frontend/public/favicon.svg` | Browser tab icon |
-| `frontend/.oxlintrc.json` | Lint rules |
+| `frontend/vite.config.js` | Dev server on port 5180, with an `/api` proxy to the backend |
+| `frontend/.gitignore`, `frontend/.oxlintrc.json` | Frontend ignore rules and lint rules |
+| `frontend/index.html`, `frontend/public/favicon.svg` | HTML entry page and tab icon |
+| `frontend/src/main.jsx`, `App.jsx` | React entry point; page layout, tabs, decision-time control, method notes, shareable-link state |
+| `frontend/src/components/DecisionView.jsx` | Decision view: what was known at the cutoff. Forecast chart with publish times, recent error cards and range band, coverage, which publication was used. |
+| `frontend/src/components/AccuracyView.jsx` | Accuracy view: date range, metric cards with explanations, actual-vs-forecast chart, daily bias, skill card, breakdowns, decision-time comparison |
+| `frontend/src/components/StatTile.jsx`, `ChartTooltip.jsx`, `Notice.jsx` | Shared UI pieces (cards, tooltips, status messages for loading, partial, empty and error states) |
+| `frontend/src/api.js`, `useApi.js` | API URLs; a fetch hook that cancels outdated requests |
+| `frontend/src/format.js`, `format.test.js` | London-time and MW formatting ("—" for missing values), with tests |
+| `frontend/src/urlState.js`, `urlState.test.js` | Shareable-link state, with tests |
+| `frontend/src/theme.js`, `App.css`, `index.css` | Chart colours (light and dark) and styles |
 | **data/** | |
-| `data/README.md` | Data folders, how to recreate them, source attribution |
-| `data/processed/actuals.csv` | Half-hourly WIND actuals, 2 Jan to 1 Feb 2026 London (1,488 rows) |
+| `data/README.md` | Data folders, reproduction command, attribution |
+| `data/processed/actuals.csv` | Half-hourly WIND actuals, 2 January to 1 February 2026 (1,488 rows) |
 | `data/processed/forecasts.csv` | Every WINDFOR publication covering those days (256 publications, 17,864 rows) |
-| `data/processed/manifest.json` | Sources, request ranges, retrieval times, row counts, cleaning and coverage report, assumptions |
-| `data/raw/` | Original API responses and documentation captures (local only, gitignored) |
+| `data/processed/manifest.json` | Sources, request ranges, retrieval times, counts, coverage, assumptions |
+| `data/raw/` | Original API responses (local only, gitignored) |
 | **docs/** | |
-| `docs/evaluation.md` | Metric definitions, January evaluation results, interpretation and suggested improvements |
-| `docs/data-notes.md` | Verified Elexon endpoint details, field meanings, limitations, publish vs target time, dataset comparability |
-| `docs/CHECKLIST.md` | Stage-by-stage implementation checklist |
+| `docs/data-notes.md` | Verified Elexon endpoint details, publish vs target time, data limitations and comparability |
+| `docs/evaluation.md` | Metric definitions, January results, interpretation, suggested improvements |
+| `docs/CHECKLIST.md` | Stage-by-stage build checklist |
 | `docs/demo-script.md` | Outline for the demo video |
 
-## Out of scope
-
-No login, no data sources other than Elexon, no machine-learning forecasting,
-and no recommendation of how much power to buy. The app reports forecasts and
-their errors only.
-
-## AI assistance
+## 14. AI assistance
 
 This project was built with substantial help from **Claude (Anthropic), using
-Claude Code**. Claude helped with:
+Claude Code**, an AI coding assistant.
 
-- planning the stages;
-- inspecting the Elexon API documentation and responses;
-- writing the backend, frontend, tests, Docker and Vercel configuration, and
-  documentation.
+**What Claude did:**
+- **Planning:** proposed the stage plan.
+- **Data research:** inspected the Elexon API documentation and real
+  responses, and wrote `docs/data-notes.md`.
+- **Writing:** the backend, frontend, data pipeline, tests, Docker and Vercel
+  configuration, and documentation, including this README.
+- **Checks:** ran the tests, lint and builds after changes; checked the UI in
+  a headless browser; measured live responses; and ran an independent
+  AI-assisted code review, whose bugs were fixed and covered by tests.
 
-All work was directed, reviewed and run step by step by the author. The data
-rules (no look-ahead, missing data preserved, timezone handling) are enforced
-by automated tests rather than taken on trust.
+**What the author did:**
+- **Requirements:** set the requirements and data rules.
+- **Decisions:** made the design decisions, including:
+  - averaging half-hours to compare with hourly forecasts;
+  - deploying on Vercel as a single project;
+  - which suggested improvements to build and which to drop.
+- **Review:** reviewed the work stage by stage and requested further checks.
+- **Running it:** ran the app locally and reported problems.
+- **Publishing:** committed and pushed the code, and created and connected
+  the GitHub and Vercel accounts.
+
+The core data rules (no look-ahead, missing data preserved, timezone
+handling) are enforced by automated tests rather than taken on trust.
