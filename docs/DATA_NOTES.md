@@ -36,6 +36,29 @@ Base URL: `https://data.elexon.co.uk/bmrs/api/v1`.
 - A 7-day publish-time range returned 4,088 rows (about 460 KB) in one request.
   The snapshot script will fetch in chunks of at most 7 days to stay safe.
 
+## Snapshot (Stage 2)
+
+Built with `python -m scripts.build_snapshot` (run from `backend/`). Files in
+`data/snapshot/`, timestamps as UTC ISO strings ending in `Z`:
+
+- `actuals.csv`: `start_time, generation_mw`. 1,488 half-hours (2 Jan to
+  1 Feb 2026 London). All 1,488 are present; none are missing.
+- `forecasts.csv`: `publish_time, start_time, generation_mw`. Every
+  publication that has at least one hour inside the delivery window: 256
+  publications, 17,864 rows, no missing values. Only rows whose `start_time`
+  falls inside the delivery window are kept.
+- `metadata.json`: download ranges, row counts and the quality report.
+
+Findings across the whole month:
+
+- 8 publications every London day, as expected. Publications from 28 to
+  30 Dec don't reach 2 Jan, so the first useful one is 31 Dec 02:30.
+- **Publication times vary.** On 15 Jan the usual 11:30 publication came
+  at **12:25** instead. The code must use real `publishTime` values and never
+  assume a fixed schedule.
+- With the default 10:00 cutoff, the latest eligible publication covers all
+  24 hours of the delivery day for every decision date (1 to 31 Jan).
+
 ## What this means for the app
 
 - **Default cutoff 10:00 Europe/London** = 10:00 UTC in January. The latest

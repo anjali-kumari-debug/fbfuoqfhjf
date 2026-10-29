@@ -1,0 +1,7 @@
+# Backend dependencies (Python 3.13). Pinned so local, test and Docker match.
+fastapi==0.162.0
+uvicorn[standard]==0.54.0
+pandas==3.1.0
+httpx==0.28.1
+tzdata==2026.6
+pytest==9.2.0
