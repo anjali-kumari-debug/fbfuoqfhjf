@@ -1,0 +1,5 @@
+# Heroku builds the Dockerfile on its own (amd64) servers when you `git push heroku main`.
+# The container's CMD starts uvicorn on Heroku's $PORT.
+build:
+  docker:
+    web: Dockerfile

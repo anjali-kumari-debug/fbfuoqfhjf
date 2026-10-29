@@ -29,7 +29,7 @@ about how much power to buy. We report forecasts and their errors only.
   Fields: `startTime` (30-minute resolution), `generation` (MW).
 - **Forecasts:** `WINDFOR` stream, which keeps historical publications.
   Fields: `startTime`, `publishTime` (when the forecast was made), `generation` (MW).
-- Endpoints, parameters and resolutions are verified in `docs/DATA_NOTES.md`.
+- Endpoints, parameters and resolutions are verified in `docs/data-notes.md`.
 - **Alignment (decided):** WINDFOR is hourly and FUELHH is half-hourly. Score
   on the hourly grid: forecast for hour `T` vs the mean of the actual
   half-hours starting at `T` and `T+30min`. If either half-hour is missing,
@@ -65,19 +65,22 @@ about how much power to buy. We report forecasts and their errors only.
 ## Reproducibility
 
 - Raw API downloads go in `data/raw/` (gitignored).
-- A small, cleaned historical snapshot is committed (planned: `data/snapshot/`),
+- A small, cleaned historical snapshot is committed in `data/snapshot/`,
   so the demo and tests run without calling Elexon.
 - A script re-creates the snapshot from the API.
 
-## Planned layout
+## Layout
 
 ```
-backend/    FastAPI app, data loading, forecast selection, metrics, pytest tests
-frontend/   React + Vite app (build output frontend/dist is gitignored)
-data/       raw/ (ignored) and snapshot/ (committed)
-docs/       checklist and notes (requirements.md is local only)
-Dockerfile  multi-stage: build frontend, then run FastAPI
+backend/     FastAPI app (app/), snapshot script (scripts/), pytest tests (tests/)
+frontend/    React + Vite app; npm test runs node:test (build output dist/ is gitignored)
+data/        raw/ (ignored) and snapshot/ (committed)
+docs/        checklist, data notes, demo script (requirements.md is local only)
+Dockerfile   multi-stage: build frontend, then run FastAPI
+heroku.yml   Heroku builds the Dockerfile on its own servers
 ```
+
+Dev ports: frontend 5180, backend 8001 (other local projects use 5173/8000).
 
 ## Deliverables
 
