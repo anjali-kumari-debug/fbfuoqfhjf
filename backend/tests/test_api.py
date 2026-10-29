@@ -258,3 +258,36 @@ def test_accuracy_returns_hourly_series_for_the_selected_range(client):
     assert [i["target_time"] for i in intervals] == sorted(i["target_time"] for i in intervals)
     for i in intervals:
         assert set(i) >= {"decision_date", "forecast_mw", "forecast_publish_time", "actual_mw", "error_mw"}
+
+
+def test_forecast_includes_recent_error_track_record_known_at_cutoff(client):
+    body = strict_json(client.get("/api/forecast", params={"decision_date": "2026-01-15"}))
+    r = body["recent_errors"]
+    assert (r["window_first_decision"], r["window_last_decision"]) == ("2026-01-08", "2026-01-14")
+    assert r["decisions_with_data"] == 7 and r["matched_intervals"] > 0
+    for key in ("bias_mw", "mae_mw", "p10_mw", "p90_mw", "p90_abs_error_mw"):
+        assert isinstance(r[key], float)
+    assert "not changed" in r["note"]
+    # The selected forecast itself is untouched by the track record.
+    plain = client.get("/api/forecast", params={"decision_date": "2026-01-15"}).json()
+    assert [i["forecast_mw"] for i in body["intervals"]] == [i["forecast_mw"] for i in plain["intervals"]]
+
+
+def test_forecast_recent_errors_are_null_before_any_history(client):
+    r = strict_json(client.get("/api/forecast", params={"decision_date": "2026-01-01"}))["recent_errors"]
+    assert r["matched_intervals"] == 0 and r["bias_mw"] is None and r["p90_abs_error_mw"] is None
+
+
+def test_accuracy_by_decision_time(client):
+    body = strict_json(client.get("/api/accuracy/decision-times"))
+    rows = {r["decision_time"]: r for r in body["decision_times"]}
+    assert list(rows) == ["00:00", "02:30", "06:00", "10:00", "12:30", "16:00", "20:00"]
+    assert rows["00:00"]["forecast_coverage"] < 1 and rows["10:00"]["matched_intervals"] == 744
+    ten = client.get("/api/accuracy", params={"decision_time": "10:00"}).json()["pooled"]
+    assert rows["10:00"]["mae_mw"] == pytest.approx(ten["mae_mw"])  # consistent with /api/accuracy
+    assert "p90_abs_error_mw" in rows["10:00"]
+
+
+def test_accuracy_by_decision_time_validates_range(client):
+    r = client.get("/api/accuracy/decision-times", params={"start_date": "2026-01-20", "end_date": "2026-01-10"})
+    assert r.status_code == 422 and "on or before" in r.json()["detail"]

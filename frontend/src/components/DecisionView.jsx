@@ -1,6 +1,6 @@
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Area, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { forecastUrl } from '../api'
-import { addDays, londonDateTime, londonTime, longDate, mw, percent } from '../format'
+import { addDays, londonDateTime, londonTime, longDate, mw, percent, shortDate, signedMw } from '../format'
 import { useChartColors } from '../theme'
 import { useApi } from '../useApi'
 import ChartTooltip from './ChartTooltip'
@@ -103,7 +103,11 @@ function DecisionDetail({ data, stale, onShowOutcome }) {
         />
       </div>
 
-      {withForecast.length > 0 && <ForecastChart intervals={data.intervals} deliveryDate={data.delivery_date} />}
+      <RecentTrackRecord recent={data.recent_errors} />
+
+      {withForecast.length > 0 && (
+        <ForecastChart intervals={data.intervals} deliveryDate={data.delivery_date} recent={data.recent_errors} />
+      )}
 
       <PublicationsUsed intervals={data.intervals} />
 
@@ -121,19 +125,76 @@ function DecisionDetail({ data, stale, onShowOutcome }) {
   )
 }
 
-function ForecastChart({ intervals, deliveryDate }) {
+// The forecast's recent error record, as known at this cutoff. Describes past errors only.
+function RecentTrackRecord({ recent }) {
+  const span = `${shortDate(recent.window_first_decision)} to ${shortDate(recent.window_last_decision)}`
+  return (
+    <section className="track-record" aria-labelledby="track-record-heading">
+      <h3 id="track-record-heading">Recent forecast error, known at this cutoff</h3>
+      {recent.matched_intervals === 0 ? (
+        <Notice tone="empty" title="No track record yet.">
+          None of the previous {recent.window_decisions} decisions ({span}) had a scored hour by this cutoff, so
+          no error range can be shown.
+        </Notice>
+      ) : (
+        <>
+          <p className="muted">
+            Previous {recent.window_decisions} decisions ({span}), {recent.matched_intervals} hours scored against
+            actuals already published at the cutoff. This describes past errors; the forecast itself is not changed.
+          </p>
+          <div className="stat-row">
+            <StatTile
+              label="Recent bias"
+              value={signedMw(recent.bias_mw)}
+              hint={recent.bias_mw > 0 ? 'forecast ran above actual' : 'forecast ran below actual'}
+            />
+            <StatTile label="Recent typical miss (MAE)" value={mw(recent.mae_mw)} hint="average size of the miss" />
+            <StatTile
+              label="Recent P90 miss"
+              value={mw(recent.p90_abs_error_mw)}
+              hint="9 in 10 hours missed by less"
+            />
+            <StatTile
+              label="Middle 80% of errors"
+              value={`${signedMw(recent.p10_mw)} to ${signedMw(recent.p90_mw)}`}
+              hint="10th to 90th percentile"
+            />
+          </div>
+        </>
+      )}
+    </section>
+  )
+}
+
+function ForecastChart({ intervals, deliveryDate, recent }) {
   const colours = useChartColors()
-  const rows = intervals.map((i) => ({ ...i, label: londonTime(i.target_time) }))
+  const hasRange = recent.p10_mw != null && recent.p90_mw != null
+  // If recent errors (forecast - actual) repeat, actual = forecast - error lies between
+  // forecast - P90 and forecast - P10 in 8 of 10 hours. Shown as a band; the forecast is unchanged.
+  const rows = intervals.map((i) => ({
+    ...i,
+    label: londonTime(i.target_time),
+    range:
+      hasRange && i.forecast_mw != null
+        ? [Math.max(0, i.forecast_mw - recent.p90_mw), Math.max(0, i.forecast_mw - recent.p10_mw)]
+        : null,
+  }))
   return (
     <figure className="chart" aria-label={`Hourly wind generation forecast for ${longDate(deliveryDate)}, in MW`}>
       <figcaption>
         Selected wind generation forecast for the delivery day (Europe/London, MW)
         <span className="legend">
           <span className="swatch" style={{ background: colours.forecast }} /> Forecast
+          {hasRange && (
+            <>
+              <span className="swatch" style={{ background: colours.forecast, opacity: 0.25 }} /> Likely actual range
+              if recent errors repeat (8 in 10 hours)
+            </>
+          )}
         </span>
       </figcaption>
       <ResponsiveContainer width="100%" height={300}>
-        <LineChart data={rows} margin={{ top: 12, right: 16, bottom: 4, left: 8 }}>
+        <ComposedChart data={rows} margin={{ top: 12, right: 16, bottom: 4, left: 8 }}>
           <CartesianGrid stroke={colours.grid} vertical={false} />
           <XAxis
             dataKey="label"
@@ -160,6 +221,7 @@ function ForecastChart({ intervals, deliveryDate }) {
                   rows={
                     i && [
                       ['Forecast', mw(i.forecast_mw), colours.forecast],
+                      ['Likely range', i.range ? `${mw(i.range[0])} to ${mw(i.range[1])}` : '—'],
                       ['Published', londonDateTime(i.forecast_publish_time)],
                       ['Hours ahead', i.lead_time_hours == null ? '—' : String(i.lead_time_hours)],
                     ]
@@ -168,6 +230,18 @@ function ForecastChart({ intervals, deliveryDate }) {
               )
             }}
           />
+          {hasRange && (
+            <Area
+              dataKey="range"
+              name="Likely actual range"
+              stroke="none"
+              fill={colours.forecast}
+              fillOpacity={0.18}
+              connectNulls={false}
+              isAnimationActive={false}
+              activeDot={false}
+            />
+          )}
           <Line
             dataKey="forecast_mw"
             name="Forecast"
@@ -178,9 +252,13 @@ function ForecastChart({ intervals, deliveryDate }) {
             activeDot={{ r: 4, stroke: colours.surface, strokeWidth: 2 }}
             isAnimationActive={false}
           />
-        </LineChart>
+        </ComposedChart>
       </ResponsiveContainer>
-      <p className="muted small">Gaps mean no forecast had been published for that hour by the cutoff.</p>
+      <p className="muted small">
+        Gaps mean no forecast had been published for that hour by the cutoff.
+        {hasRange &&
+          ' The band is the forecast shifted by recent errors (floored at 0 MW, since output cannot be negative); it is not a separate forecast.'}
+      </p>
     </figure>
   )
 }

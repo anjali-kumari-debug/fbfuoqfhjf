@@ -34,6 +34,11 @@ Before recording:
   10:00, nothing published later."*
 - Read the "Which forecast publication was used?" box: different hours *can*
   come from different publications.
+- Point to **"Recent forecast error, known at this cutoff"** (on 15 Jan: bias
+  +1.7 GW, P90 miss about 5.7 GW) and the shaded **likely actual range** under
+  the line. *"This is the quantified error at the moment you decide, using only
+  what was known then. The band sits mostly below the forecast: plan for less
+  wind than the headline number."*
 - Set the decision time to **01:00**: a **partial forecast** notice appears
   and the last hours of the chart are blank. *"When no forecast existed yet,
   we tell you. We never show it as zero."* Set it back to 10:00.
@@ -51,8 +56,9 @@ Before recording:
   mostly red daily bias bars.
 - *"Some days are far worse"*: click **28 Jan** in the bias chart to open
   that decision.
-- Change the decision time to **16:00**: MAE drops to about 1,870 MW.
-  *"Later forecasts are better. This quantifies what waiting buys you."*
+- Scroll to **"Does deciding later help?"**: 16:00 cuts MAE to about
+  1,870 MW, but the bias stays at about +1.7 GW. *"Waiting helps a little; the
+  optimism doesn't go away."*
 
 ### 4. Honest limits and next steps (4:00–5:00)
 - The data covers **metered transmission-connected wind farms (about 82% of
@@ -106,7 +112,7 @@ reasoning.
     because output can be near zero.
 
 ### 4. Quality and practices (3:30–5:00)
-- Run `pytest` live (125 tests). Highlight the tests for:
+- Run `pytest` live (134 tests). Highlight the tests for:
   - the cutoff boundary (10:00 is used, 10:01 is not);
   - missing data staying `null`;
   - 31 Jan → 1 Feb;

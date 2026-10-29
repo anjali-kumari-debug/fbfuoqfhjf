@@ -449,3 +449,13 @@ code {
     padding: 0.75rem 0.25rem;
   }
 }
+
+.track-record h3,
+.decision-times h3 {
+  margin-top: 1.25rem;
+}
+
+tr.current-row td {
+  font-weight: 650;
+  background: var(--accent-wash);
+}

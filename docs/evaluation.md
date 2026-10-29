@@ -159,6 +159,19 @@ the raw forecast, because adjusting forecasts is outside this pilot's scope
 
 ### For the trading team (how to use the numbers today)
 
+Implemented in the app as quantified error at decision time, the purpose the
+challenge states ("so that they can make their decisions considering the
+quantified error"):
+
+- **Decision view:** the recent bias, MAE and P90 miss over the previous 7
+  decisions, using only actuals published by the cutoff. A shaded "likely
+  actual range" band shows where actual output would fall in 8 of 10 hours if
+  recent errors repeat. The forecast itself is never changed.
+- **Accuracy view:** a "Does deciding later help?" table compares the same
+  decision dates at seven decision times.
+
+How to use them:
+
 - **Treat the forecast as optimistic.** Over January it ran about 1.7 GW high in
   most hours. Plan cover against the forecast minus the recent bias, not the raw
   value.

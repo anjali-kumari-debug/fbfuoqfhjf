@@ -393,3 +393,75 @@ def test_empty_duplicate_actual_does_not_hide_real_value():
 )
 def test_cutoff_on_clock_change_days_is_well_defined(decision_date, cutoff, expected_utc):
     assert cutoff_datetime(decision_date, cutoff) == pd.Timestamp(expected_utc)
+
+
+# ------------------------------------------------------------ recent error profile (decision support)
+
+
+def published_actuals(rows):
+    """rows: (start_time, generation_mw, publish_time) as UTC strings."""
+    df = pd.DataFrame(rows, columns=["start_time", "generation_mw", "publish_time"])
+    for col in ("start_time", "publish_time"):
+        df[col] = pd.to_datetime(df[col], utc=True)
+    df["generation_mw"] = df["generation_mw"].astype(float)
+    return df
+
+
+def test_p90_abs_error_is_part_of_error_metrics():
+    m = error_metrics(pd.Series([-1000.0] + [100.0] * 9))
+    assert m["p90_abs_error_mw"] == pytest.approx(190.0)  # numpy linear interpolation between 100 and 1000
+
+
+def test_recent_profile_uses_only_past_decisions_and_published_actuals():
+    decision = date(2026, 1, 10)  # cutoff 10:00Z; history = decisions 3-9 Jan
+    f = forecasts_frame(
+        [
+            ("2026-01-08T09:30:00Z", "2026-01-09T00:00:00Z", 1100),  # decision 8 Jan -> delivery 9 Jan
+            ("2026-01-09T09:30:00Z", "2026-01-10T00:00:00Z", 1300),  # decision 9 Jan -> delivery 10 Jan
+            ("2026-01-10T09:30:00Z", "2026-01-11T00:00:00Z", 9999),  # today's own decision: never used
+        ]
+    )
+    a = published_actuals(
+        [
+            ("2026-01-09T00:00:00Z", 1000, "2026-01-09T00:30:00Z"),
+            ("2026-01-09T00:30:00Z", 1000, "2026-01-09T01:00:00Z"),
+            ("2026-01-10T00:00:00Z", 1000, "2026-01-10T00:30:00Z"),  # published before today's cutoff
+            ("2026-01-10T00:30:00Z", 1000, "2026-01-10T11:00:00Z"),  # published AFTER the cutoff
+            ("2026-01-11T00:00:00Z", 0, "2026-01-11T00:30:00Z"),  # the future
+            ("2026-01-11T00:30:00Z", 0, "2026-01-11T01:00:00Z"),
+        ]
+    )
+    p = analysis.recent_error_profile(a, f, decision, TEN)
+    # Only the 9 Jan hour is matched: error +100. The 10 Jan hour lacks a published second half,
+    # and 11 Jan (today's delivery) is never part of the history.
+    assert p["matched_intervals"] == 1
+    assert p["bias_mw"] == pytest.approx(100)
+    assert (p["window_first_decision"], p["window_last_decision"]) == ("2026-01-03", "2026-01-09")
+
+
+def test_recent_profile_history_uses_each_past_decisions_own_cutoff():
+    f = forecasts_frame(
+        [
+            ("2026-01-08T09:30:00Z", "2026-01-09T00:00:00Z", 1100),
+            ("2026-01-08T11:00:00Z", "2026-01-09T00:00:00Z", 5000),  # after 8 Jan's 10:00 cutoff
+        ]
+    )
+    a = published_actuals([("2026-01-09T00:00:00Z", 1000, "2026-01-09T00:30:00Z"),
+                           ("2026-01-09T00:30:00Z", 1000, "2026-01-09T01:00:00Z")])
+    assert analysis.recent_error_profile(a, f, date(2026, 1, 10), TEN)["bias_mw"] == pytest.approx(100)
+
+
+def test_recent_profile_is_empty_not_zero_without_history():
+    f = forecasts_frame([("2026-01-01T09:30:00Z", FIRST_HOUR, 100)])
+    a = published_actuals([("2026-01-02T00:00:00Z", 100, "2026-01-02T00:30:00Z")])
+    p = analysis.recent_error_profile(a, f, date(2026, 1, 1), TEN)
+    assert p["matched_intervals"] == 0 and p["decisions_with_data"] == 0
+    assert p["bias_mw"] is None and p["p10_mw"] is None and p["p90_abs_error_mw"] is None
+
+
+def test_recent_profile_on_real_data_is_available_from_early_january():
+    actuals, forecasts = analysis.load_data()
+    first = analysis.recent_error_profile(actuals, forecasts, date(2026, 1, 1), TEN)
+    assert first["matched_intervals"] == 0  # nothing delivered yet
+    mid = analysis.recent_error_profile(actuals, forecasts, date(2026, 1, 15), TEN)
+    assert mid["decisions_with_data"] == 7 and mid["matched_intervals"] > 7 * 20

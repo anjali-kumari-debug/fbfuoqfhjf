@@ -10,6 +10,9 @@ export const forecastUrl = (decisionDate, decisionTime) =>
 export const accuracyUrl = (decisionTime, startDate, endDate) =>
   withQuery('/api/accuracy', { start_date: startDate, end_date: endDate, decision_time: decisionTime })
 
+export const decisionTimesUrl = (startDate, endDate) =>
+  withQuery('/api/accuracy/decision-times', { start_date: startDate, end_date: endDate })
+
 export async function getJson(url, signal) {
   const response = await fetch(url, { signal })
   const body = await response.json().catch(() => ({}))

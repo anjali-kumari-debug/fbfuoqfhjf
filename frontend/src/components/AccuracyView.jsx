@@ -11,7 +11,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { accuracyUrl } from '../api'
+import { accuracyUrl, decisionTimesUrl } from '../api'
 import { londonDateTime, londonDay, londonTime, longDate, mw, percent, shortDate, signedMw } from '../format'
 import { useChartColors } from '../theme'
 import { useApi } from '../useApi'
@@ -46,6 +46,7 @@ export default function AccuracyView({ meta, decisionTime, range, onRangeChange,
         </p>
       )}
       {data && !reversed && <AccuracyDetail data={data} stale={loading} onSelectDay={onSelectDay} />}
+      {!reversed && <DecisionTimeTable range={range} decisionTime={decisionTime} />}
     </section>
   )
 }
@@ -360,5 +361,65 @@ function DailyTable({ days, onSelectDay }) {
         </tbody>
       </table>
     </div>
+  )
+}
+
+// Same decision dates, different decision times: does a later cutoff (fresher forecast) help?
+function DecisionTimeTable({ range, decisionTime }) {
+  const { data, error, loading } = useApi(decisionTimesUrl(range.start, range.end))
+  return (
+    <section className="decision-times" aria-labelledby="decision-times-heading">
+      <h3 id="decision-times-heading">Does deciding later help?</h3>
+      <p className="muted">
+        The same decision dates scored at different decision times (Europe/London). A later time can use fresher
+        forecasts; whether it is possible depends on the market timetable, which is not modelled here. All times are
+        assumptions.
+      </p>
+      {error && (
+        <Notice tone="error" title="Could not load the comparison.">
+          {error.message}
+        </Notice>
+      )}
+      {!data && loading && (
+        <p className="muted" role="status">
+          Loading comparison…
+        </p>
+      )}
+      {data && (
+        <div className={`table-scroll${loading ? ' stale' : ''}`}>
+          <table>
+            <caption className="sr-only">Accuracy of the selected forecasts by decision time</caption>
+            <thead>
+              <tr>
+                <th scope="col">Decision time</th>
+                <th scope="col">Forecast coverage</th>
+                <th scope="col">MAE</th>
+                <th scope="col">RMSE</th>
+                <th scope="col">Bias</th>
+                <th scope="col">P90 miss</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.decision_times.map((r) => {
+                const current = r.decision_time === decisionTime
+                return (
+                  <tr key={r.decision_time} className={current ? 'current-row' : undefined} aria-current={current || undefined}>
+                    <td>
+                      {r.decision_time}
+                      {current && <span className="sr-only"> (selected)</span>}
+                    </td>
+                    <td>{percent(r.forecast_coverage)}</td>
+                    <td>{mw(r.mae_mw)}</td>
+                    <td>{mw(r.rmse_mw)}</td>
+                    <td>{signedMw(r.bias_mw)}</td>
+                    <td>{mw(r.p90_abs_error_mw)}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   )
 }

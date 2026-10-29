@@ -195,7 +195,7 @@ def error_metrics(errors: pd.Series) -> dict:
     All values are None when there are no errors to score.
     """
     values = errors.dropna().to_numpy(dtype=float)
-    keys = ["mae_mw", "rmse_mw", "bias_mw"] + [f"p{p}_mw" for p in PERCENTILES]
+    keys = ["mae_mw", "rmse_mw", "bias_mw", "p90_abs_error_mw"] + [f"p{p}_mw" for p in PERCENTILES]
     if values.size == 0:
         return {"n": 0, **dict.fromkeys(keys)}
     result = {
@@ -203,10 +203,47 @@ def error_metrics(errors: pd.Series) -> dict:
         "mae_mw": float(np.mean(np.abs(values))),
         "rmse_mw": float(np.sqrt(np.mean(values**2))),
         "bias_mw": float(np.mean(values)),
+        # 9 in 10 matched intervals missed by less than this (size of miss, either direction).
+        "p90_abs_error_mw": float(np.percentile(np.abs(values), 90)),
     }
     for p, v in zip(PERCENTILES, np.percentile(values, PERCENTILES)):
         result[f"p{p}_mw"] = float(v)
     return result
+
+
+RECENT_WINDOW_DAYS = 7
+
+
+def recent_error_profile(
+    actuals: pd.DataFrame,
+    forecasts: pd.DataFrame,
+    decision_date: date,
+    cutoff: time,
+    window_days: int = RECENT_WINDOW_DAYS,
+) -> dict:
+    """The forecast's recent track record, as it was known at this decision's cutoff.
+
+    Pools the errors of the previous `window_days` decisions (each with its own
+    cutoff and selected forecasts), scored only against actuals that had been
+    *published* by this decision's cutoff. Today's and future outcomes are never
+    used, so this is safe to show next to today's forecast. It describes past
+    errors; it does not change the forecast. Metrics are None when no matched
+    history exists yet (e.g. at the start of the data).
+    """
+    if "publish_time" not in actuals:
+        raise ValueError("actuals need a publish_time column to know what was published by the cutoff")
+    cutoff_utc = cutoff_datetime(decision_date, cutoff)
+    known = actuals[actuals["publish_time"] <= cutoff_utc]
+    history = [decision_date - timedelta(days=k) for k in range(1, window_days + 1)]
+    errors = [decision_table(known, forecasts, d, cutoff)["error_mw"] for d in history]
+    pooled = pd.concat(errors)
+    return {
+        "window_first_decision": history[-1].isoformat(),
+        "window_last_decision": history[0].isoformat(),
+        "decisions_with_data": int(sum(e.notna().any() for e in errors)),
+        "matched_intervals": int(pooled.notna().sum()),
+        **error_metrics(pooled),
+    }
 
 
 def error_histogram(errors: pd.Series, bin_mw: int = 500) -> list[dict]:

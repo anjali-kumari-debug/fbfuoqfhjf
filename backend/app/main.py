@@ -35,6 +35,8 @@ FIRST_DECISION_DATE = date(2026, 1, 1)
 LAST_DECISION_DATE = date(2026, 1, 31)
 HISTOGRAM_BIN_MW = 500
 REQUIRED_FILES = ("actuals.csv", "forecasts.csv", "manifest.json")
+# Decision times compared in /api/accuracy/decision-times (Europe/London). All are assumptions.
+DECISION_TIME_OPTIONS = ("00:00", "02:30", "06:00", "10:00", "12:30", "16:00", "20:00")
 
 TIMEZONE = "Europe/London"
 ERROR_DEFINITION = "error = forecast - actual (MW); positive = over-forecast, negative = under-forecast"
@@ -45,6 +47,10 @@ DECISION_TIME_NOTE = (
 ALIGNMENT_NOTE = (
     "Forecasts are hourly; actuals are half-hourly. Each hour's actual is the mean of its two half-hours, "
     "and is missing if either half-hour is missing."
+)
+RECENT_ERRORS_NOTE = (
+    "Track record of the selected forecasts for the previous decisions, scored only against actuals "
+    "published by this decision's cutoff. It describes past errors; the forecast itself is not changed."
 )
 SELECTION_RULE = (
     "For each delivery hour, the forecast with the latest publish time at or before the decision cutoff. "
@@ -190,6 +196,12 @@ def forecast(
         "publish_times_used": [clean(pd.Timestamp(t)) for t in sorted(table["publish_time"].dropna().unique())],
         "coverage": clean_dict(analysis.coverage(table)),
         "metrics": clean_dict(analysis.error_metrics(table["error_mw"])),
+        # Known at the cutoff: safe to use for the decision (no same-day or future actuals).
+        "recent_errors": {
+            **clean_dict(analysis.recent_error_profile(data.actuals, data.forecasts, d, cut)),
+            "window_decisions": analysis.RECENT_WINDOW_DAYS,
+            "note": RECENT_ERRORS_NOTE,
+        },
         "intervals": records(intervals),
         "actuals_half_hourly": records(half_hours[["start_time", "generation_mw"]]),
     }
@@ -233,6 +245,33 @@ def accuracy(
         "intervals": records(intervals),  # hourly selected forecast vs retrospective actual
         "error_histogram": analysis.error_histogram(result["hours"]["error_mw"], HISTOGRAM_BIN_MW),
         "histogram_bin_mw": HISTOGRAM_BIN_MW,
+    }
+
+
+@app.get("/api/accuracy/decision-times")
+def accuracy_by_decision_time(
+    request: Request,
+    start_date: str = Query(FIRST_DECISION_DATE.isoformat(), description="First decision date, YYYY-MM-DD"),
+    end_date: str = Query(LAST_DECISION_DATE.isoformat(), description="Last decision date, YYYY-MM-DD"),
+) -> dict:
+    """Pooled accuracy of the selected forecasts for several decision times, same decision dates."""
+    start = parse_decision_date(start_date, "start_date")
+    end = parse_decision_date(end_date, "end_date")
+    if start > end:
+        raise HTTPException(status_code=422, detail=f"start_date ({start}) must be on or before end_date ({end})")
+    data = dataset(request)
+    dates = [start + timedelta(days=i) for i in range((end - start).days + 1)]
+    rows = []
+    for text in DECISION_TIME_OPTIONS:
+        overall = analysis.accuracy(data.actuals, data.forecasts, dates, analysis.parse_cutoff(text))["overall"]
+        rows.append({"decision_time": text, **clean_dict(overall)})
+    return {
+        "start_date": start.isoformat(),
+        "end_date": end.isoformat(),
+        "timezone": TIMEZONE,
+        "decision_time_note": DECISION_TIME_NOTE,
+        "error_definition": ERROR_DEFINITION,
+        "decision_times": rows,
     }
 
 
