@@ -60,6 +60,9 @@ Before recording:
 - No demand data is included, so this is **not a procurement-volume
   calculator**. We report forecasts and their errors, one input to the
   buying decision.
+- Evaluation (`docs/evaluation.md`): the forecast beats a naive baseline by
+  about 53%, but about half its error is the constant over-forecast. A
+  what-if bias correction cut MAE by about 17%: a clear next step.
 - Possible next steps: other months, solar, error bands by time of day or
   forecast age, a live feed.
 
@@ -103,7 +106,7 @@ reasoning.
     because output can be near zero.
 
 ### 4. Quality and practices (3:30–5:00)
-- Run `pytest` live (117 tests). Highlight the tests for:
+- Run `pytest` live (125 tests). Highlight the tests for:
   - the cutoff boundary (10:00 is used, 10:01 is not);
   - missing data staying `null`;
   - 31 Jan → 1 Feb;

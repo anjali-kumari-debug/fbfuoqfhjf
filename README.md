@@ -27,7 +27,11 @@ data is used.
 | Bias (mean error) | **+1,730 MW**: forecasts were consistently higher than actual output |
 | Middle 80% of errors | -489 MW to +4,144 MW |
 
-A later cutoff (16:00) reduces MAE to about 1,870 MW. With a cutoff before
+The forecast beats a naive persistence baseline by about 53% on MAE, but about
+half of its squared error is this constant over-forecast. A later cutoff
+(16:00) reduces MAE to about 1,870 MW. The full evaluation, with metric
+definitions and suggested improvements, is in
+[docs/evaluation.md](docs/evaluation.md). With a cutoff before
 02:30, the newest forecast doesn't yet cover the last 2 hours of the delivery
 day, so coverage drops to 91.7%. The app reports this instead of filling in
 those hours.
@@ -143,7 +147,7 @@ to avoid the common defaults 5173 and 8000.
 
 | What | Where to run | Command |
 |---|---|---|
-| Backend tests (117: selection, cutoff boundary, missing data, timezones, metrics, API endpoints and validation, cleaning, retries, pipeline) | `backend/` | `../.venv/bin/python -m pytest` |
+| Backend tests (125: selection, cutoff boundary, missing data, timezones, metrics, API endpoints and validation, cleaning, retries, pipeline) | `backend/` | `../.venv/bin/python -m pytest` |
 | Frontend tests (7: London-time display and day labels, missing values, formatting) | `frontend/` | `npm test` |
 | Frontend lint | `frontend/` | `npm run lint` |
 | Production build | `frontend/` | `npm run build` |
@@ -238,10 +242,12 @@ pipeline first, adding `httpx` to `pyproject.toml`:
 | `backend/app/serialize.py` | Converts pandas/numpy values to JSON-safe values (NaN becomes `null`, timestamps become UTC strings) |
 | `backend/app/analysis.py` | Core logic: delivery-day hours, forecast selection at the cutoff, hourly alignment, coverage, metrics |
 | `backend/app/elexon.py` | Elexon API client (bounded chunks, timeouts, bounded retries) and cleaning (WIND filter, UTC parsing, validation, duplicate and conflict handling) |
+| `backend/app/evaluate.py` | Evaluation CLI (`python -m backend.app.evaluate`): extended metrics, persistence baseline and skill, breakdowns, a no-look-ahead bias-correction what-if |
 | `backend/app/fetch_data.py` | Data pipeline CLI (`python -m backend.app.fetch_data --decision-month 2026-01`): plans ranges, fetches, preserves raw, cleans, writes processed CSVs and the manifest |
 | `backend/tests/test_analysis.py` | Tests for selection, cutoff boundary, missing data, timezones and clock changes, 31 Jan → 1 Feb, metrics, plus checks on the real processed data |
 | `backend/tests/test_api.py` | Endpoint tests: required fields, cutoff with timezone, separate coverage counts, pooled vs daily metrics, null metrics, 422 validation, loading once at startup, clear failure when data is missing, static frontend |
 | `backend/tests/test_elexon_clean.py` | Cleaning tests: WIND filter, exact duplicates vs conflicts, validation, grid checks, older publications kept, missing values |
+| `backend/tests/test_evaluate.py` | Evaluation tests: hand-calculated metrics, matched pairs only, skill score, baseline and correction without look-ahead |
 | `backend/tests/test_fetch_data.py` | Pipeline tests against a fake API: date planning, retries and their limits, raw files preserved byte for byte, chunk sizes, manifest, coverage without filling gaps |
 | **frontend/** | |
 | `frontend/package.json`, `package-lock.json` | Node dependencies (React, Recharts, Vite) and scripts |
@@ -266,6 +272,7 @@ pipeline first, adding `httpx` to `pyproject.toml`:
 | `data/processed/manifest.json` | Sources, request ranges, retrieval times, row counts, cleaning and coverage report, assumptions |
 | `data/raw/` | Original API responses and documentation captures (local only, gitignored) |
 | **docs/** | |
+| `docs/evaluation.md` | Metric definitions, January evaluation results, interpretation and suggested improvements |
 | `docs/data-notes.md` | Verified Elexon endpoint details, field meanings, limitations, publish vs target time, dataset comparability |
 | `docs/CHECKLIST.md` | Stage-by-stage implementation checklist |
 | `docs/demo-script.md` | Outline for the demo video |
