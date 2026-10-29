@@ -3,7 +3,7 @@
 Hour estimates are guides. Stop and review at the end of each stage.
 
 - [x] **0. Setup (0.5h):** CLAUDE.md, .gitignore, this checklist.
-- [ ] **1. Explore data (1.5h):** check the FUELHH and WINDFOR stream endpoints,
+- [x] **1. Explore data (1.5h):** check the FUELHH and WINDFOR stream endpoints,
       parameters, field formats and WINDFOR resolution. Save samples to `data/raw/`.
 - [ ] **2. Snapshot script (1.5h):** fetch late Dec 2025 to 1 Feb 2026 with httpx.
       Filter to WIND and write a cleaned snapshot to `data/snapshot/`.

@@ -29,10 +29,11 @@ about how much power to buy. We report forecasts and their errors only.
   Fields: `startTime` (30-minute resolution), `generation` (MW).
 - **Forecasts:** `WINDFOR` stream, which keeps historical publications.
   Fields: `startTime`, `publishTime` (when the forecast was made), `generation` (MW).
-- Check exact endpoint paths, query parameters, and WINDFOR's time resolution
-  against the live API docs during the data step. Do not assume them.
-  If WINDFOR is hourly and FUELHH is half-hourly, align them explicitly and
-  document how. Never interpolate silently.
+- Endpoints, parameters and resolutions are verified in `docs/DATA_NOTES.md`.
+- **Alignment (decided):** WINDFOR is hourly and FUELHH is half-hourly. Score
+  on the hourly grid: forecast for hour `T` vs the mean of the actual
+  half-hours starting at `T` and `T+30min`. If either half-hour is missing,
+  the hour's actual is missing. Never interpolate. State this in UI and README.
 
 ## Data rules (must hold everywhere)
 
