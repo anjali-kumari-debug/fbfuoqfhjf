@@ -7,7 +7,7 @@ Hour estimates are guides. Stop and review at the end of each stage.
       parameters, field formats and WINDFOR resolution. Save samples to `data/raw/`.
 - [x] **2. Snapshot script (1.5h):** fetch late Dec 2025 to 1 Feb 2026 with httpx.
       Filter to WIND and write a cleaned snapshot to `data/snapshot/`.
-- [ ] **3. Core logic + tests (3h):** timezone-aware parsing, delivery-day
+- [x] **3. Core logic + tests (3h):** timezone-aware parsing, delivery-day
       intervals, latest forecast at or before the cutoff, coverage, and error
       metrics. pytest covers edge cases (cutoff boundary, missing data,
       31 Jan → 1 Feb).
