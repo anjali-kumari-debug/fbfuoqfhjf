@@ -245,3 +245,14 @@ def test_api_routes_take_priority_over_static_files(client):
 
 def test_removed_decision_endpoint_is_gone(client):
     assert client.get("/api/decision", params={"date": "2026-01-10"}).status_code in (404, 405)
+
+
+def test_accuracy_returns_hourly_series_for_the_selected_range(client):
+    body = client.get("/api/accuracy", params={"start_date": "2026-01-30", "end_date": "2026-01-31"}).json()
+    intervals = body["intervals"]
+    assert len(intervals) == 48  # two delivery days of 24 hours
+    assert intervals[0]["target_time"] == "2026-01-31T00:00:00Z"
+    assert intervals[-1]["target_time"] == "2026-02-01T23:00:00Z"
+    assert [i["target_time"] for i in intervals] == sorted(i["target_time"] for i in intervals)
+    for i in intervals:
+        assert set(i) >= {"decision_date", "forecast_mw", "forecast_publish_time", "actual_mw", "error_mw"}

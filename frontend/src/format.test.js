@@ -37,3 +37,10 @@ test('calendar dates move across month ends without timezone shifts', () => {
   assert.equal(addDays('2026-01-01', -1), '2025-12-31')
   assert.equal(shortDate('2026-02-01'), '1 Feb')
 })
+
+test('London day labels come from London time, not UTC', async () => {
+  const { londonDay } = await import('./format.js')
+  assert.equal(londonDay('2026-01-11T00:00:00Z'), '11 Jan')
+  assert.equal(londonDay('2026-06-30T23:30:00Z'), '1 Jul') // 00:30 BST on 1 Jul
+  assert.equal(londonDay(null), '—')
+})

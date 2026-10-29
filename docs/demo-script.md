@@ -25,34 +25,41 @@ Before recording:
   you made in January 2026."
 
 ### 2. Decision view (0:45–2:15)
-- Show decision **15 Jan at 10:00 → delivery 16 Jan**.
-- Point to "Forecast published 15 Jan, 09:30": *"This is exactly what you
-  could have seen at 10:00, nothing published later."*
-- Point to the **cutoff box and its badge**: *"10:00 is our demo assumption,
-  not a market rule. Set it to your real cutoff."*
-- Hover the chart: forecast vs actual, hour by hour; the error is shown for
-  each hour.
-- Point out the two sections: **what you could see at the cutoff** vs **how it
-  turned out**. *"Actuals are only used to score, never to choose."*
-- Click **Next day** once or twice.
+- Pick decision date **15 Jan**. The delivery day (**16 Jan**) is worked out
+  for you, and every time is labelled **Europe/London**.
+- Point to the **decision time box and its badge**: *"10:00 is our demo
+  assumption, not a market rule. Set it to your real cutoff."*
+- Hover the forecast chart: each hour shows the forecast MW and **the
+  publication it came from**. *"This is exactly what you could have seen at
+  10:00, nothing published later."*
+- Read the "Which forecast publication was used?" box: different hours *can*
+  come from different publications.
+- Set the decision time to **01:00**: a **partial forecast** notice appears
+  and the last hours of the chart are blank. *"When no forecast existed yet,
+  we tell you. We never show it as zero."* Set it back to 10:00.
+- Click **"See how this forecast compared with actual generation"**.
 
-### 3. Accuracy over January (2:15–4:00)
-- Headline numbers: **MAE about 2,000 MW; bias +1,730 MW.**
-- *"The key finding: forecasts were consistently **too high**, by about 1.7
-  GW on average. If you bought only to cover the gap left by the forecast
-  wind, you would usually have been short."* Use the histogram: most bars are
-  red (over-forecast).
-- Daily charts: *"Some days are far worse"* (click **28 Jan**, the worst day,
-  to open it). *"That's when the uncertainty matters most."*
-- Change the cutoff to **16:00**: MAE drops to about 1,870 MW. *"Later
-  forecasts are better. This quantifies what waiting buys you."*
-- Change the cutoff to **01:00**: coverage drops to 91.7%. *"When the
-  forecast didn't yet cover an hour, we tell you. We never fill it in."*
+### 3. Accuracy (2:15–4:00)
+- That link opens the accuracy view for one day; actuals are clearly marked
+  **retrospective**. Click **All of January**.
+- Headline cards: **MAE about 2,000 MW, bias +1,730 MW, 744 / 744 hours
+  matched**. The short guide explains each metric and the error sign.
+- *"The key finding: forecasts were consistently **too high**, by about
+  1.7 GW on average. If you bought only to cover the gap left by the
+  forecast wind, you would usually have been short."* Show it in the
+  actual-vs-forecast chart (the blue line sits above the orange) and in the
+  mostly red daily bias bars.
+- *"Some days are far worse"*: click **28 Jan** in the bias chart to open
+  that decision.
+- Change the decision time to **16:00**: MAE drops to about 1,870 MW.
+  *"Later forecasts are better. This quantifies what waiting buys you."*
 
 ### 4. Honest limits and next steps (4:00–5:00)
 - The data covers **metered transmission-connected wind farms (about 82% of
   GB wind)**, not embedded wind.
-- We report errors; we don't tell you how much to buy.
+- No demand data is included, so this is **not a procurement-volume
+  calculator**. We report forecasts and their errors, one input to the
+  buying decision.
 - Possible next steps: other months, solar, error bands by time of day or
   forecast age, a live feed.
 

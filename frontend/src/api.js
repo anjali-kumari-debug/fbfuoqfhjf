@@ -7,8 +7,8 @@ export const metaUrl = () => '/api/meta'
 export const forecastUrl = (decisionDate, decisionTime) =>
   withQuery('/api/forecast', { decision_date: decisionDate, decision_time: decisionTime })
 
-// start_date / end_date default to the whole of January on the server.
-export const accuracyUrl = (decisionTime) => withQuery('/api/accuracy', { decision_time: decisionTime })
+export const accuracyUrl = (decisionTime, startDate, endDate) =>
+  withQuery('/api/accuracy', { start_date: startDate, end_date: endDate, decision_time: decisionTime })
 
 export async function getJson(url, signal) {
   const response = await fetch(url, { signal })

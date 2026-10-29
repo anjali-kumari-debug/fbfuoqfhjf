@@ -210,6 +210,12 @@ def accuracy(
     result = analysis.accuracy(data.actuals, data.forecasts, dates, cut)
     days = result["days"].copy()
     days["decision_cutoff"] = [cutoff_info(d, cut)["decision_cutoff"] for d in days["decision_date"]]
+    intervals = (
+        result["hours"]
+        .reset_index()
+        .rename(columns={"start_time": "target_time", "publish_time": "forecast_publish_time"})
+        [["target_time", "decision_date", "forecast_mw", "forecast_publish_time", "actual_mw", "error_mw"]]
+    )
     return {
         "start_date": start.isoformat(),
         "end_date": end.isoformat(),
@@ -220,6 +226,7 @@ def accuracy(
         "error_definition": ERROR_DEFINITION,
         "pooled": clean_dict(result["overall"]),
         "days": records(days),
+        "intervals": records(intervals),  # hourly selected forecast vs retrospective actual
         "error_histogram": analysis.error_histogram(result["hours"]["error_mw"], HISTOGRAM_BIN_MW),
         "histogram_bin_mw": HISTOGRAM_BIN_MW,
     }

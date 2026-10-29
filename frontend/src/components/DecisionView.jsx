@@ -1,27 +1,31 @@
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { forecastUrl } from '../api'
-import { addDays, londonDateTime, londonTime, longDate, mw, percent, signedMw } from '../format'
+import { addDays, londonDateTime, londonTime, longDate, mw, percent } from '../format'
 import { useChartColors } from '../theme'
 import { useApi } from '../useApi'
 import ChartTooltip from './ChartTooltip'
+import Notice from './Notice'
 import StatTile from './StatTile'
 
-export default function DecisionView({ meta, date, onDateChange, cutoff }) {
-  const { data, error, loading } = useApi(forecastUrl(date, cutoff))
+// What the trader could know at the decision cutoff: forecasts only.
+// Actuals are retrospective and appear in the accuracy view.
+export default function DecisionView({ meta, date, onDateChange, decisionTime, onShowOutcome }) {
+  const { data, error, loading } = useApi(forecastUrl(date, decisionTime))
   const first = meta.first_decision_date
   const last = meta.last_decision_date
 
   return (
-    <section>
+    <section aria-labelledby="decision-heading">
       <div className="controls">
         <label>
-          Decision date
+          Decision date (January 2026)
           <input
             type="date"
             value={date}
             min={first}
             max={last}
-            onChange={(e) => e.target.value && onDateChange(e.target.value)}
+            required
+            onChange={(e) => e.target.value >= first && e.target.value <= last && onDateChange(e.target.value)}
           />
         </label>
         <button type="button" onClick={() => onDateChange(addDays(date, -1))} disabled={date <= first}>
@@ -32,97 +36,104 @@ export default function DecisionView({ meta, date, onDateChange, cutoff }) {
         </button>
       </div>
 
-      {error && <p className="error">Could not load this decision: {error.message}</p>}
-      {data && <DecisionDetail data={data} stale={loading} />}
-      {!data && loading && <p className="muted">Loading…</p>}
+      {error && (
+        <Notice tone="error" title="Could not load this decision.">
+          {error.message}
+        </Notice>
+      )}
+      {!data && loading && (
+        <p className="muted" role="status">
+          Loading forecast…
+        </p>
+      )}
+      {data && <DecisionDetail data={data} stale={loading} onShowOutcome={onShowOutcome} />}
     </section>
   )
 }
 
-function DecisionDetail({ data, stale }) {
-  const forecasts = data.intervals.filter((h) => h.forecast_mw != null)
-  const lowest = forecasts.reduce((a, b) => (b.forecast_mw < a.forecast_mw ? b : a), forecasts[0])
-  const mean = forecasts.length ? forecasts.reduce((s, h) => s + h.forecast_mw, 0) / forecasts.length : null
-  const { coverage, metrics } = data
+function DecisionDetail({ data, stale, onShowOutcome }) {
+  const { coverage } = data
+  const withForecast = data.intervals.filter((i) => i.forecast_mw != null)
+  const lowest = withForecast.reduce((a, b) => (b.forecast_mw < a.forecast_mw ? b : a), withForecast[0])
+  const highest = withForecast.reduce((a, b) => (b.forecast_mw > a.forecast_mw ? b : a), withForecast[0])
+  const mean = withForecast.length
+    ? withForecast.reduce((s, i) => s + i.forecast_mw, 0) / withForecast.length
+    : null
+  const missing = coverage.expected_intervals - coverage.forecast_intervals
 
   return (
-    <div className={stale ? 'stale' : undefined}>
-      <h2>
-        Decision on {longDate(data.decision_date)} at {data.decision_time} → delivery on{' '}
-        {longDate(data.delivery_date)}
-      </h2>
-
-      <h3>At the cutoff: what the trader could see</h3>
+    <div className={stale ? 'stale' : undefined} aria-busy={stale}>
+      <h2 id="decision-heading">Delivery day: {longDate(data.delivery_date)}</h2>
       <p className="muted">
-        {data.publish_times_used.length === 0
-          ? 'No forecast had been published by the cutoff.'
-          : `Forecast published ${data.publish_times_used.map(londonDateTime).join(', ')} (London time), the latest available at or before the cutoff.`}
+        Decision on {longDate(data.decision_date)} at <strong>{data.decision_time} Europe/London</strong> (cutoff{' '}
+        <code>{data.decision_cutoff}</code>). The delivery day is the next Europe/London calendar day:{' '}
+        {coverage.expected_intervals} hourly intervals.
       </p>
+
+      {coverage.forecast_intervals === 0 ? (
+        <Notice tone="empty" title="No forecast available.">
+          No forecast for this delivery day had been published by {data.decision_time}. Try a later decision time.
+        </Notice>
+      ) : (
+        missing > 0 && (
+          <Notice tone="partial" title="Partial forecast.">
+            {missing} of {coverage.expected_intervals} hours had no forecast published by the cutoff. They are left
+            blank, not shown as zero.
+          </Notice>
+        )
+      )}
+
       <div className="stat-row">
-        <StatTile label="Average forecast" value={mw(mean)} />
+        <StatTile label="Average forecast" value={mw(mean)} hint="over hours with a forecast" />
         <StatTile
-          label="Lowest forecast hour"
+          label="Lowest hour"
           value={mw(lowest?.forecast_mw)}
-          hint={lowest ? `at ${londonTime(lowest.target_time)}` : undefined}
+          hint={lowest && `at ${londonTime(lowest.target_time)}`}
+        />
+        <StatTile
+          label="Highest hour"
+          value={mw(highest?.forecast_mw)}
+          hint={highest && `at ${londonTime(highest.target_time)}`}
         />
         <StatTile
           label="Forecast coverage"
           value={percent(coverage.forecast_coverage)}
           hint={`${coverage.forecast_intervals} of ${coverage.expected_intervals} hours`}
+          meter={coverage.forecast_coverage}
         />
       </div>
 
-      <h3>Afterwards: how the forecast turned out</h3>
-      <p className="muted">Actual generation is only known after delivery. It is used to score the forecast, never to choose it.</p>
-      <div className="stat-row">
-        <StatTile label="MAE" value={mw(metrics.mae_mw)} hint="typical size of the miss" />
-        <StatTile label="Bias (mean error)" value={signedMw(metrics.bias_mw)} hint="+ means over-forecast" />
-        <StatTile label="RMSE" value={mw(metrics.rmse_mw)} hint="penalises large misses" />
-        <StatTile
-          label="Scored hours"
-          value={percent(coverage.matched_coverage)}
-          hint={`${coverage.matched_intervals} of ${coverage.expected_intervals} hours have both`}
-        />
-      </div>
+      {withForecast.length > 0 && <ForecastChart intervals={data.intervals} deliveryDate={data.delivery_date} />}
 
-      <ForecastActualChart hours={data.intervals} />
+      <PublicationsUsed intervals={data.intervals} />
+
+      <p>
+        <button type="button" className="link" onClick={() => onShowOutcome(data.decision_date)}>
+          See how this forecast compared with actual generation →
+        </button>
+      </p>
 
       <details>
-        <summary>Show hourly table</summary>
-        <HourlyTable hours={data.intervals} />
+        <summary>Show hourly forecast table</summary>
+        <ForecastTable intervals={data.intervals} />
       </details>
     </div>
   )
 }
 
-function ForecastActualChart({ hours }) {
+function ForecastChart({ intervals, deliveryDate }) {
   const colours = useChartColors()
-  const rows = hours.map((h) => ({ ...h, label: londonTime(h.target_time) }))
-  const lastRow = rows[rows.length - 1]
-  // Push the two end labels apart so they never overlap.
-  const forecastOnTop = (lastRow?.forecast_mw ?? 0) >= (lastRow?.actual_mw ?? 0)
-
-  const endLabel = (text, above) =>
-    function EndLabel({ x, y, index }) {
-      if (index !== rows.length - 1 || y == null) return null
-      return (
-        <text x={x + 8} y={y} dy={above ? -4 : 12} className="end-label">
-          {text}
-        </text>
-      )
-    }
-
+  const rows = intervals.map((i) => ({ ...i, label: londonTime(i.target_time) }))
   return (
-    <figure className="chart">
+    <figure className="chart" aria-label={`Hourly wind generation forecast for ${longDate(deliveryDate)}, in MW`}>
       <figcaption>
-        Hourly wind generation, delivery day (London time, MW)
+        Selected wind generation forecast for the delivery day (Europe/London, MW)
         <span className="legend">
           <span className="swatch" style={{ background: colours.forecast }} /> Forecast
-          <span className="swatch" style={{ background: colours.actual }} /> Actual (mean of two half-hours)
         </span>
       </figcaption>
-      <ResponsiveContainer width="100%" height={320}>
-        <LineChart data={rows} margin={{ top: 16, right: 72, bottom: 4, left: 8 }}>
+      <ResponsiveContainer width="100%" height={300}>
+        <LineChart data={rows} margin={{ top: 12, right: 16, bottom: 4, left: 8 }}>
           <CartesianGrid stroke={colours.grid} vertical={false} />
           <XAxis
             dataKey="label"
@@ -141,17 +152,16 @@ function ForecastActualChart({ hours }) {
           <Tooltip
             cursor={{ stroke: colours.axis }}
             content={({ active, payload }) => {
-              const h = payload?.[0]?.payload
+              const i = payload?.[0]?.payload
               return (
                 <ChartTooltip
-                  active={active && h}
-                  title={h && `${h.label} London`}
+                  active={active && i}
+                  title={i && `${i.label} Europe/London`}
                   rows={
-                    h && [
-                      ['Forecast', mw(h.forecast_mw), colours.forecast],
-                      ['Actual', mw(h.actual_mw), colours.actual],
-                      ['Error', signedMw(h.error_mw)],
-                      ['Published', londonDateTime(h.forecast_publish_time)],
+                    i && [
+                      ['Forecast', mw(i.forecast_mw), colours.forecast],
+                      ['Published', londonDateTime(i.forecast_publish_time)],
+                      ['Hours ahead', i.lead_time_hours == null ? '—' : String(i.lead_time_hours)],
                     ]
                   }
                 />
@@ -164,52 +174,68 @@ function ForecastActualChart({ hours }) {
             stroke={colours.forecast}
             strokeWidth={2}
             dot={false}
+            connectNulls={false}
             activeDot={{ r: 4, stroke: colours.surface, strokeWidth: 2 }}
             isAnimationActive={false}
-            label={endLabel('Forecast', forecastOnTop)}
-          />
-          <Line
-            dataKey="actual_mw"
-            name="Actual"
-            stroke={colours.actual}
-            strokeWidth={2}
-            dot={false}
-            activeDot={{ r: 4, stroke: colours.surface, strokeWidth: 2 }}
-            isAnimationActive={false}
-            label={endLabel('Actual', !forecastOnTop)}
           />
         </LineChart>
       </ResponsiveContainer>
-      <p className="muted small">Gaps in a line mean the data is missing; missing values are never filled in.</p>
+      <p className="muted small">Gaps mean no forecast had been published for that hour by the cutoff.</p>
     </figure>
   )
 }
 
-function HourlyTable({ hours }) {
+function PublicationsUsed({ intervals }) {
+  const counts = new Map()
+  for (const i of intervals) {
+    if (i.forecast_publish_time) {
+      counts.set(i.forecast_publish_time, (counts.get(i.forecast_publish_time) ?? 0) + 1)
+    }
+  }
+  if (counts.size === 0) return null
   return (
-    <table>
-      <thead>
-        <tr>
-          <th>Hour (London)</th>
-          <th>Forecast</th>
-          <th>Actual</th>
-          <th>Error</th>
-          <th>Published</th>
-          <th>Hours ahead</th>
-        </tr>
-      </thead>
-      <tbody>
-        {hours.map((h) => (
-          <tr key={h.target_time}>
-            <td>{londonTime(h.target_time)}</td>
-            <td>{mw(h.forecast_mw)}</td>
-            <td>{mw(h.actual_mw)}</td>
-            <td>{signedMw(h.error_mw)}</td>
-            <td>{londonDateTime(h.forecast_publish_time)}</td>
-            <td>{h.lead_time_hours ?? '—'}</td>
-          </tr>
+    <div className="publications">
+      <h3>Which forecast publication was used?</h3>
+      <p className="muted">
+        Each hour uses the <strong>latest forecast published at or before the cutoff</strong> for that hour. Usually
+        one publication covers the whole day, but if the newest one does not cover an hour, an older one is used, so
+        publication times can differ between hours. Hover the chart to see the publication for each hour.
+      </p>
+      <ul>
+        {[...counts.entries()].map(([published, n]) => (
+          <li key={published}>
+            Published {londonDateTime(published)} Europe/London: {n} {n === 1 ? 'hour' : 'hours'}
+          </li>
         ))}
-      </tbody>
-    </table>
+      </ul>
+    </div>
+  )
+}
+
+function ForecastTable({ intervals }) {
+  return (
+    <div className="table-scroll">
+      <table>
+        <caption className="sr-only">Hourly selected forecast with publication time</caption>
+        <thead>
+          <tr>
+            <th scope="col">Hour (Europe/London)</th>
+            <th scope="col">Forecast</th>
+            <th scope="col">Published</th>
+            <th scope="col">Hours ahead</th>
+          </tr>
+        </thead>
+        <tbody>
+          {intervals.map((i) => (
+            <tr key={i.target_time}>
+              <td>{londonTime(i.target_time)}</td>
+              <td>{mw(i.forecast_mw)}</td>
+              <td>{londonDateTime(i.forecast_publish_time)}</td>
+              <td>{i.lead_time_hours ?? '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }

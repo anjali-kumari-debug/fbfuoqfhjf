@@ -51,3 +51,8 @@ export const addDays = (isoDate, days) => {
   d.setUTCDate(d.getUTCDate() + days)
   return d.toISOString().slice(0, 10)
 }
+
+const dayFormat = new Intl.DateTimeFormat('en-GB', { timeZone: LONDON, day: 'numeric', month: 'short' })
+
+// London calendar day of a UTC timestamp, e.g. '11 Jan'.
+export const londonDay = (iso) => (iso ? dayFormat.format(new Date(iso)) : '—')
