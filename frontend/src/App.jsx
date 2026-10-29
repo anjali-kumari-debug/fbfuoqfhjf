@@ -1,122 +1,115 @@
 import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
 import './App.css'
+import { metaUrl } from './api'
+import AccuracyView from './components/AccuracyView'
+import DecisionView from './components/DecisionView'
+import { useApi } from './useApi'
 
-function App() {
-  const [count, setCount] = useState(0)
+const VALID_CUTOFF = /^([01]\d|2[0-3]):[0-5]\d$/
+
+export default function App() {
+  const { data: meta, error } = useApi(metaUrl())
+
+  return (
+    <div className="app">
+      <header className="app-header">
+        <h1>Wind Forecast Desk</h1>
+        <p className="muted">
+          Great Britain national wind generation: the day-ahead forecast available at your decision time, and how
+          accurate those forecasts turned out to be.
+        </p>
+      </header>
+      {error && <p className="error">Could not reach the API: {error.message}</p>}
+      {meta && <Dashboard meta={meta} />}
+    </div>
+  )
+}
+
+const TABS = ['decision', 'accuracy']
+
+function Dashboard({ meta }) {
+  // The tab lives in the URL hash (#decision / #accuracy) so links and refreshes keep the view.
+  const [tab, setTabState] = useState(() => (TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'decision'))
+  const [date, setDate] = useState(meta.first_decision_date)
+  const [cutoff, setCutoff] = useState(meta.default_cutoff)
+
+  const setTab = (next) => {
+    history.replaceState(null, '', `#${next}`)
+    setTabState(next)
+  }
+
+  const openDay = (day) => {
+    setDate(day)
+    setTab('decision')
+  }
 
   return (
     <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+      <div className="toolbar">
+        <div className="tabs" role="tablist">
+          <button type="button" role="tab" aria-selected={tab === 'decision'} onClick={() => setTab('decision')}>
+            Decision view
+          </button>
+          <button type="button" role="tab" aria-selected={tab === 'accuracy'} onClick={() => setTab('accuracy')}>
+            Accuracy over January
+          </button>
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+        <label className="cutoff">
+          Decision cutoff (London time)
+          <input
+            type="time"
+            step={60}
+            value={cutoff}
+            onChange={(e) => VALID_CUTOFF.test(e.target.value) && setCutoff(e.target.value)}
+          />
+          <span className="badge" title={meta.cutoff_note}>
+            Demo assumption, not a market rule
+          </span>
+        </label>
+      </div>
 
-      <div className="ticks"></div>
+      <main>
+        {tab === 'decision' ? (
+          <DecisionView meta={meta} date={date} onDateChange={setDate} cutoff={cutoff} />
+        ) : (
+          <AccuracyView cutoff={cutoff} onSelectDay={openDay} />
+        )}
+      </main>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
+      <MethodNotes meta={meta} />
     </>
   )
 }
 
-export default App
+function MethodNotes({ meta }) {
+  return (
+    <footer className="method">
+      <h3>How this works</h3>
+      <ul>
+        <li>
+          <strong>Decision and delivery:</strong> a decision is made on a January 2026 date and covers the next London
+          calendar day ({meta.first_decision_date} to {meta.last_decision_date} decisions).
+        </li>
+        <li>
+          <strong>Forecast choice:</strong> {meta.selection_rule}
+        </li>
+        <li>
+          <strong>Matching resolutions:</strong> {meta.alignment_note}
+        </li>
+        <li>
+          <strong>Error:</strong> {meta.error_convention}. MAPE is not used because wind output can be close to zero.
+        </li>
+        <li>
+          <strong>Missing data</strong> is shown as a gap or "—" and counted in coverage. It is never filled in.
+        </li>
+        <li>
+          <strong>Data:</strong> Elexon BMRS FUELHH (WIND) actuals and WINDFOR forecasts, from a snapshot taken{' '}
+          {meta.snapshot_generated_at_utc?.slice(0, 10)}. All times shown in {meta.timezone} time.
+        </li>
+        <li>
+          This tool reports forecasts and their errors. It does not recommend how much power to buy.
+        </li>
+      </ul>
+    </footer>
+  )
+}
