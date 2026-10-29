@@ -25,7 +25,7 @@ Hour estimates are guides. Stop and review at the end of each stage.
 - [ ] **8. README + GitHub (1h):** directory guide, startup steps, URL,
       AI-assistance disclosure. Public repo with a random name.
       Done: README written (Vercel URL still to fill in).
-      To do: `gh auth login`, create public repo `azoouh`, push.
+      Done: public repo https://github.com/anjali-kumari-debug/fbfuoqfhjf pushed.
 - [ ] **9. Demo video (2h):** at most 10 minutes (about 5 minutes pitch and
       about 5 minutes technical). Upload as unlisted on YouTube and check in
       incognito. Script ready: `docs/demo-script.md`.
