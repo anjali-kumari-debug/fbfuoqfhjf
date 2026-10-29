@@ -1,0 +1,21 @@
+# Keep the build context small and free of local-only or secret files.
+.git
+.venv
+**/__pycache__
+**/.pytest_cache
+.DS_Store
+.vscode
+.idea
+
+frontend/node_modules
+frontend/dist
+
+data/raw
+
+.env
+.env.*
+!.env.example
+
+docs/requirements.md
+reint pdf.pdf
+reint.doc

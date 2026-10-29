@@ -15,7 +15,7 @@ Hour estimates are guides. Stop and review at the end of each stage.
       `/api/decision?date=&cutoff=` and `/api/accuracy?cutoff=`, with tests.
 - [x] **5. React UI (3h):** decision view (forecast vs actual chart, cutoff
       label, coverage) and accuracy view (MAE, RMSE, bias, error distribution).
-- [ ] **6. Docker (1h):** multi-stage build. FastAPI serves `frontend/dist`.
+- [x] **6. Docker (1h):** multi-stage build. FastAPI serves `frontend/dist`.
       Run locally.
 - [ ] **7. Heroku deploy (1h):** container deploy, then check in incognito.
 - [ ] **8. README + GitHub (1h):** directory guide, startup steps, URL,

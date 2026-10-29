@@ -3,7 +3,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
+from app.main import FRONTEND_DIST, app
 
 client = TestClient(app)
 
@@ -99,3 +99,16 @@ def test_accuracy_changes_with_cutoff():
 
 def test_accuracy_rejects_bad_cutoff():
     assert client.get("/api/accuracy", params={"cutoff": "9:00"}).status_code == 422
+
+
+@pytest.mark.skipif(not FRONTEND_DIST.is_dir(), reason="frontend not built (run npm run build)")
+def test_root_serves_built_react_app():
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert '<div id="root">' in response.text
+
+
+def test_api_routes_take_priority_over_static_files():
+    response = client.get("/api/health")
+    assert response.headers["content-type"].startswith("application/json")

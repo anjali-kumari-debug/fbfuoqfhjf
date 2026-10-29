@@ -1,22 +1,31 @@
-"""FastAPI app: JSON API over the committed snapshot.
+"""FastAPI app: JSON API over the committed snapshot, plus the built React app.
 
 Run from backend/:  ../.venv/bin/uvicorn app.main:app --reload
 Interactive docs:   http://127.0.0.1:8000/docs
+
+If frontend/dist exists (after `npm run build`, or inside Docker), it is served
+at "/" so one service delivers both the UI and the API.
 """
 
 from __future__ import annotations
 
 import json
 import math
+import os
 from datetime import date, time, timedelta
 from functools import lru_cache
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.staticfiles import StaticFiles
 
 from app import analysis
 
+FRONTEND_DIST = Path(
+    os.environ.get("FRONTEND_DIST", Path(__file__).resolve().parents[2] / "frontend" / "dist")
+)
 FIRST_DECISION_DATE = date(2026, 1, 1)
 LAST_DECISION_DATE = date(2026, 1, 31)
 HISTOGRAM_BIN_MW = 500
@@ -173,3 +182,8 @@ def accuracy(
         "error_histogram": histogram(result["hours"]["error_mw"]),
         "histogram_bin_mw": HISTOGRAM_BIN_MW,
     }
+
+
+# Mounted last so every /api route above takes priority over static files.
+if FRONTEND_DIST.is_dir():
+    app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")
