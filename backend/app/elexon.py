@@ -5,7 +5,7 @@
 
 Timestamps stay timezone-aware in UTC. Callers decide day boundaries in
 Europe/London. Missing or invalid generation values are kept as NaN, never
-filled or dropped. See docs/DATA_NOTES.md for the API findings.
+filled or dropped. See docs/data-notes.md for the API findings.
 """
 
 from __future__ import annotations
@@ -104,7 +104,14 @@ def clean_actuals(rows: list[dict], window_start: datetime, window_end: datetime
             "generation_mw": pd.to_numeric(df["generation"], errors="coerce"),
         }
     )
-    df = df.sort_values(["start_time", "publish_time"])
+    # The API schema allows null timestamps. A row without startTime cannot be
+    # placed in time, so it is removed, but counted rather than dropped silently.
+    no_start = df["start_time"].isna()
+    report["rows_without_start_time_removed"] = int(no_start.sum())
+    df = df[~no_start]
+
+    # A missing publishTime sorts first, so it never beats a known revision.
+    df = df.sort_values(["start_time", "publish_time"], na_position="first")
     before = len(df)
     df = df.drop_duplicates("start_time", keep="last")
     report["duplicate_start_times_removed"] = before - len(df)
@@ -131,6 +138,12 @@ def clean_forecasts(rows: list[dict], window_start: datetime, window_end: dateti
             "generation_mw": pd.to_numeric(df["generation"], errors="coerce"),
         }
     )
+    # Without publishTime the no-look-ahead rule cannot be applied, and without
+    # startTime the row has no target hour: remove such rows, but count them.
+    no_time = df["publish_time"].isna() | df["start_time"].isna()
+    report["rows_without_timestamps_removed"] = int(no_time.sum())
+    df = df[~no_time]
+
     before = len(df)
     df = df.drop_duplicates(["publish_time", "start_time"], keep="last")
     report["duplicate_rows_removed"] = before - len(df)

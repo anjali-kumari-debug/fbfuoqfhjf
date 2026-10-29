@@ -15,8 +15,8 @@ export default function App() {
       <header className="app-header">
         <h1>Wind Forecast Desk</h1>
         <p className="muted">
-          Great Britain national wind generation: the day-ahead forecast available at your decision time, and how
-          accurate those forecasts turned out to be.
+          Great Britain wind generation (metered, transmission-connected wind farms): the day-ahead forecast
+          available at your decision time, and how accurate those forecasts turned out to be.
         </p>
       </header>
       {error && <p className="error">Could not reach the API: {error.message}</p>}
@@ -105,6 +105,11 @@ function MethodNotes({ meta }) {
         <li>
           <strong>Data:</strong> Elexon BMRS FUELHH (WIND) actuals and WINDFOR forecasts, from a snapshot taken{' '}
           {meta.snapshot_generated_at_utc?.slice(0, 10)}. All times shown in {meta.timezone} time.
+        </li>
+        <li>
+          <strong>Coverage of the data:</strong> both datasets cover wind farms with operational metering on the
+          transmission network. They exclude embedded (distribution-connected) wind, so these figures are not total
+          GB wind output. NESO estimates metered wind farms are about 82% of the total.
         </li>
         <li>
           This tool reports forecasts and their errors. It does not recommend how much power to buy.

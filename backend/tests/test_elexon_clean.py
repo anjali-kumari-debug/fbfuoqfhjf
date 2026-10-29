@@ -78,3 +78,30 @@ def test_forecasts_outside_delivery_window_are_dropped():
     ]
     df, _ = clean_forecasts(rows, START, END)
     assert df["generation_mw"].tolist() == [2]
+
+
+def test_actuals_row_without_start_time_is_counted_not_silently_dropped():
+    rows = [actual("2026-01-02T00:00:00Z", 100), actual(None, 200)]
+    df, report = clean_actuals(rows, START, END)
+    assert df["generation_mw"].tolist() == [100]
+    assert report["rows_without_start_time_removed"] == 1
+
+
+def test_actuals_missing_publish_time_never_beats_a_known_revision():
+    rows = [
+        actual("2026-01-02T00:00:00Z", 200, publish="2026-01-02T05:00:00Z"),
+        actual("2026-01-02T00:00:00Z", 999, publish=None),
+    ]
+    df, _ = clean_actuals(rows, START, END)
+    assert df["generation_mw"].tolist() == [200]
+
+
+def test_forecast_rows_without_timestamps_are_counted_and_removed():
+    rows = [
+        forecast("2026-01-01T09:30:00Z", "2026-01-02T00:00:00Z", 10),
+        forecast(None, "2026-01-02T00:00:00Z", 999),  # unknown publish time: cannot prove no look-ahead
+        forecast("2026-01-01T09:30:00Z", None, 999),
+    ]
+    df, report = clean_forecasts(rows, START, END)
+    assert df["generation_mw"].tolist() == [10]
+    assert report["rows_without_timestamps_removed"] == 2
