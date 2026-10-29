@@ -246,6 +246,70 @@ def recent_error_profile(
     }
 
 
+# ---------------------------------------------------------------- baseline and breakdowns
+
+
+def persistence_value(actuals: pd.DataFrame, decision_date: date, cutoff: time) -> float:
+    """Naive baseline: the latest actual half-hour *published* at or before the cutoff.
+
+    "Whatever the wind was doing when I decided continues all of tomorrow." It uses
+    only information the trader had at the cutoff (no look-ahead). NaN if none.
+    """
+    cutoff_utc = cutoff_datetime(decision_date, cutoff)
+    known = actuals[(actuals["publish_time"] <= cutoff_utc) & actuals["generation_mw"].notna()]
+    if known.empty:
+        return float("nan")
+    return float(known.sort_values("start_time").iloc[-1]["generation_mw"])
+
+
+def persistence_comparison(actuals: pd.DataFrame, hours: pd.DataFrame, cutoff: time) -> dict:
+    """Selected forecast vs the persistence baseline on the same hours.
+
+    `hours` is the "hours" table from accuracy() (it has decision_date, forecast_mw,
+    actual_mw). Only hours where forecast, baseline and actual all exist are compared.
+    skill = 1 - MAE_forecast / MAE_persistence (1 perfect, 0 no better, < 0 worse).
+    """
+    baseline = {d: persistence_value(actuals, d, cutoff) for d in hours["decision_date"].unique()}
+    persistence = hours["decision_date"].map(baseline)
+    both = pd.DataFrame({"f": hours["forecast_mw"], "p": persistence, "a": hours["actual_mw"]}).dropna()
+    if both.empty:
+        return {"compared_intervals": 0, "forecast_mae_mw": None, "persistence_mae_mw": None, "skill": None}
+    forecast_mae = float((both["f"] - both["a"]).abs().mean())
+    persistence_mae = float((both["p"] - both["a"]).abs().mean())
+    return {
+        "compared_intervals": int(len(both)),
+        "forecast_mae_mw": forecast_mae,
+        "persistence_mae_mw": persistence_mae,
+        "skill": 1 - forecast_mae / persistence_mae if persistence_mae else None,
+    }
+
+
+HOUR_BLOCKS = ("00-05", "06-11", "12-17", "18-23")
+WIND_LEVELS = ("<5 GW", "5-10 GW", "10-15 GW", ">=15 GW")
+
+
+def hour_block(index: pd.DatetimeIndex) -> pd.Series:
+    """Europe/London 6-hour block of each delivery hour, e.g. '06-11'."""
+    hours = index.tz_convert(LONDON).hour
+    return pd.Series([HOUR_BLOCKS[h // 6] for h in hours], index=index)
+
+
+def wind_level(actual: pd.Series) -> pd.Series:
+    """Band of actual output (retrospective: only known after delivery). NaN stays NaN."""
+    return pd.cut(actual, bins=[0, 5000, 10000, 15000, np.inf], right=False, labels=list(WIND_LEVELS))
+
+
+def grouped_metrics(hours: pd.DataFrame, groups: pd.Series, order: tuple[str, ...]) -> list[dict]:
+    """Matched-interval metrics per group, in a fixed order (empty groups have n = 0, metrics None)."""
+    out = []
+    for name in order:
+        errors = hours.loc[groups == name, "error_mw"]
+        m = error_metrics(errors)
+        out.append({"group": name, "n": m["n"], "mae_mw": m["mae_mw"], "rmse_mw": m["rmse_mw"],
+                    "bias_mw": m["bias_mw"], "p90_abs_error_mw": m["p90_abs_error_mw"]})
+    return out
+
+
 def error_histogram(errors: pd.Series, bin_mw: int = 500) -> list[dict]:
     """Counts of matched-interval errors in fixed-width bins, e.g. [-500, 0), [0, 500)."""
     values = errors.dropna().to_numpy(dtype=float)

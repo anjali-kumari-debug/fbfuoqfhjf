@@ -129,6 +129,15 @@ function AccuracyDetail({ data, stale, onSelectDay }) {
           hint="10th to 90th percentile"
         />
         <StatTile
+          label="Skill vs naive baseline"
+          value={data.persistence.skill == null ? '—' : `${Math.round(data.persistence.skill * 100)}%`}
+          hint={
+            data.persistence.skill == null
+              ? 'no baseline available'
+              : `MAE ${mw(data.persistence.forecast_mae_mw)} vs ${mw(data.persistence.persistence_mae_mw)}, same ${data.persistence.compared_intervals} h`
+          }
+        />
+        <StatTile
           label="Matched intervals"
           value={`${p.matched_intervals} / ${p.expected_intervals}`}
           hint={`${percent(p.matched_coverage)} of expected hours`}
@@ -140,6 +149,7 @@ function AccuracyDetail({ data, stale, onSelectDay }) {
 
       {p.matched_intervals > 0 && <ActualVsForecastChart intervals={data.intervals} />}
       {days.length > 1 && <DailyBiasChart days={days} onSelectDay={onSelectDay} />}
+      {p.matched_intervals > 0 && <Breakdowns breakdowns={data.breakdowns} />}
 
       <details open={days.length <= 3}>
         <summary>Daily accuracy table</summary>
@@ -169,6 +179,13 @@ function MetricGuide({ errorDefinition }) {
       <div>
         <dt>Bias</dt>
         <dd>Mean error: a systematic lean. Near 0 means misses cancel out on average.</dd>
+      </div>
+      <div>
+        <dt>Skill vs naive baseline</dt>
+        <dd>
+          Compared with a naive rule (the latest actual known at the cutoff, assumed to continue all day): 1 −
+          MAE(forecast) ÷ MAE(baseline). 0% means no better than the rule; higher is better.
+        </dd>
       </div>
       <div>
         <dt>Middle 80% of errors</dt>
@@ -421,5 +438,61 @@ function DecisionTimeTable({ range, decisionTime }) {
         </div>
       )}
     </section>
+  )
+}
+
+// Where are the misses largest? Same matched hours, grouped two ways.
+function Breakdowns({ breakdowns }) {
+  return (
+    <section aria-labelledby="breakdowns-heading">
+      <h3 id="breakdowns-heading">Where are the misses largest?</h3>
+      <div className="breakdowns">
+        <GroupTable
+          caption="By time of day (Europe/London)"
+          groupLabel="Hours of day"
+          rows={breakdowns.hour_of_day}
+          formatGroup={(g) => `${g.replace('-', ':00–')}:59`}
+        />
+        <GroupTable
+          caption="By actual wind level"
+          note={breakdowns.wind_level_note}
+          groupLabel="Actual output"
+          rows={breakdowns.wind_level}
+        />
+      </div>
+    </section>
+  )
+}
+
+function GroupTable({ caption, note, groupLabel, rows, formatGroup = (g) => g }) {
+  return (
+    <div className="table-scroll">
+      <table>
+        <caption className="table-caption">
+          {caption}
+          {note && <span className="muted small"> {note}</span>}
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">{groupLabel}</th>
+            <th scope="col">Hours</th>
+            <th scope="col">MAE</th>
+            <th scope="col">Bias</th>
+            <th scope="col">P90 miss</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.group}>
+              <td>{formatGroup(r.group)}</td>
+              <td>{r.n}</td>
+              <td>{mw(r.mae_mw)}</td>
+              <td>{signedMw(r.bias_mw)}</td>
+              <td>{mw(r.p90_abs_error_mw)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }

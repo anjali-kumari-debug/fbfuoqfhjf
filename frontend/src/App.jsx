@@ -1,13 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import './App.css'
 import { metaUrl } from './api'
 import AccuracyView from './components/AccuracyView'
 import DecisionView from './components/DecisionView'
 import Notice from './components/Notice'
 import { useApi } from './useApi'
+import { buildSearch, parseState } from './urlState'
 
 const VALID_TIME = /^([01]\d|2[0-3]):[0-5]\d$/
-const TABS = ['decision', 'accuracy']
 
 export default function App() {
   const { data: meta, error, loading } = useApi(metaUrl())
@@ -48,24 +48,22 @@ function SourceLine({ meta }) {
 }
 
 function Dashboard({ meta }) {
-  // The tab lives in the URL hash (#decision / #accuracy) so links and refreshes keep the view.
-  const [tab, setTabState] = useState(() => (TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'decision'))
-  const [date, setDate] = useState(meta.first_decision_date)
-  const [decisionTime, setDecisionTime] = useState(meta.default_decision_time)
-  const [range, setRange] = useState({ start: meta.first_decision_date, end: meta.last_decision_date })
+  // The whole view (tab, dates, decision time) lives in the URL, so any view can be shared as a link.
+  const [state, setState] = useState(() => parseState(location.search, location.hash, meta))
+  const { view: tab, date, time: decisionTime } = state
+  const range = { start: state.start, end: state.end }
+  const update = (changes) => setState((s) => ({ ...s, ...changes }))
 
-  const setTab = (next) => {
-    history.replaceState(null, '', `#${next}`)
-    setTabState(next)
-  }
-  const openDecision = (day) => {
-    setDate(day)
-    setTab('decision')
-  }
-  const showOutcome = (day) => {
-    setRange({ start: day, end: day })
-    setTab('accuracy')
-  }
+  useEffect(() => {
+    history.replaceState(null, '', `${location.pathname}${buildSearch(state)}`)
+  }, [state])
+
+  const setTab = (view) => update({ view })
+  const setDate = (d) => update({ date: d })
+  const setDecisionTime = (time) => update({ time })
+  const setRange = (r) => update({ start: r.start, end: r.end })
+  const openDecision = (day) => update({ date: day, view: 'decision' })
+  const showOutcome = (day) => update({ start: day, end: day, view: 'accuracy' })
 
   return (
     <>
@@ -107,6 +105,7 @@ function Dashboard({ meta }) {
             Default {meta.default_decision_time} is an assumption, not a market rule
           </span>
         </div>
+        <CopyLinkButton />
       </div>
 
       <main id="panel" role="tabpanel" aria-labelledby={`tab-${tab}`}>
@@ -182,5 +181,29 @@ function MethodNotes({ meta }) {
         </p>
       )}
     </footer>
+  )
+}
+
+// Copies the current address (which encodes the whole view) to the clipboard.
+function CopyLinkButton() {
+  const [status, setStatus] = useState('')
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(location.href)
+      setStatus('Link copied')
+    } catch {
+      setStatus('Copy the address bar to share this view')
+    }
+    setTimeout(() => setStatus(''), 3000)
+  }
+  return (
+    <div className="copy-link">
+      <button type="button" onClick={copy}>
+        Copy link to this view
+      </button>
+      <span role="status" className="small muted">
+        {status}
+      </span>
+    </div>
   )
 }

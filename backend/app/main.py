@@ -52,6 +52,12 @@ RECENT_ERRORS_NOTE = (
     "Track record of the selected forecasts for the previous decisions, scored only against actuals "
     "published by this decision's cutoff. It describes past errors; the forecast itself is not changed."
 )
+PERSISTENCE_NOTE = (
+    "Naive baseline: the latest actual published by each decision's cutoff, assumed to continue for the whole "
+    "delivery day. Skill = 1 - MAE(forecast) / MAE(baseline), compared on the same hours: 1 is perfect, "
+    "0 is no better than the baseline, below 0 is worse."
+)
+WIND_LEVEL_NOTE = "Grouped by actual output, which is only known after delivery (retrospective)."
 SELECTION_RULE = (
     "For each delivery hour, the forecast with the latest publish time at or before the decision cutoff. "
     "Actuals are never used to choose forecasts."
@@ -243,6 +249,19 @@ def accuracy(
         "pooled": clean_dict(result["overall"]),
         "days": records(days),
         "intervals": records(intervals),  # hourly selected forecast vs retrospective actual
+        "persistence": {
+            **clean_dict(analysis.persistence_comparison(data.actuals, result["hours"], cut)),
+            "note": PERSISTENCE_NOTE,
+        },
+        "breakdowns": {
+            "hour_of_day": analysis.grouped_metrics(
+                result["hours"], analysis.hour_block(result["hours"].index), analysis.HOUR_BLOCKS
+            ),
+            "wind_level": analysis.grouped_metrics(
+                result["hours"], analysis.wind_level(result["hours"]["actual_mw"]), analysis.WIND_LEVELS
+            ),
+            "wind_level_note": WIND_LEVEL_NOTE,
+        },
         "error_histogram": analysis.error_histogram(result["hours"]["error_mw"], HISTOGRAM_BIN_MW),
         "histogram_bin_mw": HISTOGRAM_BIN_MW,
     }

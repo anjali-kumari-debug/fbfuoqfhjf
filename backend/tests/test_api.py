@@ -291,3 +291,16 @@ def test_accuracy_by_decision_time(client):
 def test_accuracy_by_decision_time_validates_range(client):
     r = client.get("/api/accuracy/decision-times", params={"start_date": "2026-01-20", "end_date": "2026-01-10"})
     assert r.status_code == 422 and "on or before" in r.json()["detail"]
+
+
+def test_accuracy_includes_persistence_skill_and_breakdowns(client):
+    body = strict_json(client.get("/api/accuracy"))
+    p = body["persistence"]
+    assert p["compared_intervals"] == 720  # 1 Jan has no published actual before its cutoff
+    assert 0.5 < p["skill"] < 0.6 and p["persistence_mae_mw"] > p["forecast_mae_mw"]
+    assert "same hours" in p["note"]
+    b = body["breakdowns"]
+    assert [r["group"] for r in b["hour_of_day"]] == ["00-05", "06-11", "12-17", "18-23"]
+    assert sum(r["n"] for r in b["hour_of_day"]) == body["pooled"]["matched_intervals"]
+    assert sum(r["n"] for r in b["wind_level"]) == body["pooled"]["matched_intervals"]
+    assert "retrospective" in b["wind_level_note"]

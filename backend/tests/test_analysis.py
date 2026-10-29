@@ -465,3 +465,49 @@ def test_recent_profile_on_real_data_is_available_from_early_january():
     assert first["matched_intervals"] == 0  # nothing delivered yet
     mid = analysis.recent_error_profile(actuals, forecasts, date(2026, 1, 15), TEN)
     assert mid["decisions_with_data"] == 7 and mid["matched_intervals"] > 7 * 20
+
+
+# ------------------------------------------------------------ persistence baseline and breakdowns
+
+
+def test_persistence_comparison_uses_common_hours_and_computes_skill():
+    a = published_actuals(
+        [
+            ("2026-01-01T09:00:00Z", 900, "2026-01-01T09:30:00Z"),  # last published before the 10:00 cutoff
+            ("2026-01-02T00:00:00Z", 1000, "2026-01-02T00:30:00Z"),
+            ("2026-01-02T00:30:00Z", 1000, "2026-01-02T01:00:00Z"),
+            ("2026-01-02T01:00:00Z", 1300, "2026-01-02T01:30:00Z"),
+            ("2026-01-02T01:30:00Z", 1300, "2026-01-02T02:00:00Z"),
+        ]
+    )
+    f = forecasts_frame(
+        [("2026-01-01T09:30:00Z", FIRST_HOUR, 1100), ("2026-01-01T09:30:00Z", "2026-01-02T01:00:00Z", 1200)]
+    )
+    hours = accuracy(a, f, [DECISION], TEN)["hours"]
+    c = analysis.persistence_comparison(a, hours, TEN)
+    # forecast errors: +100, -100 -> MAE 100 ; persistence 900: errors -100, -400 -> MAE 250
+    assert c["compared_intervals"] == 2
+    assert c["forecast_mae_mw"] == pytest.approx(100) and c["persistence_mae_mw"] == pytest.approx(250)
+    assert c["skill"] == pytest.approx(0.6)
+
+
+def test_persistence_comparison_is_null_without_a_baseline():
+    a = published_actuals([("2026-01-02T00:00:00Z", 1000, "2026-01-02T00:30:00Z"),
+                           ("2026-01-02T00:30:00Z", 1000, "2026-01-02T01:00:00Z")])
+    f = forecasts_frame([("2026-01-01T09:30:00Z", FIRST_HOUR, 1100)])
+    hours = accuracy(a, f, [DECISION], TEN)["hours"]  # nothing was published by 1 Jan 10:00
+    c = analysis.persistence_comparison(a, hours, TEN)
+    assert c["compared_intervals"] == 0 and c["skill"] is None
+
+
+def test_hour_blocks_follow_london_time():
+    idx = pd.to_datetime(["2026-01-02T05:00:00Z", "2026-01-02T06:00:00Z", "2026-06-02T05:00:00Z"], utc=True)
+    assert list(analysis.hour_block(idx)) == ["00-05", "06-11", "06-11"]  # 05:00 UTC = 06:00 BST in June
+
+
+def test_grouped_metrics_keep_empty_groups_as_null_and_skip_missing():
+    hours = pd.DataFrame({"error_mw": [100.0, -100.0, float("nan")], "actual_mw": [3000.0, 3000.0, None]})
+    rows = analysis.grouped_metrics(hours, analysis.wind_level(hours["actual_mw"]), analysis.WIND_LEVELS)
+    assert [r["group"] for r in rows] == list(analysis.WIND_LEVELS)
+    assert rows[0]["n"] == 2 and rows[0]["mae_mw"] == pytest.approx(100) and rows[0]["bias_mw"] == 0
+    assert rows[3]["n"] == 0 and rows[3]["mae_mw"] is None

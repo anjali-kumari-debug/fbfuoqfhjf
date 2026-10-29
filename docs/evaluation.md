@@ -182,14 +182,14 @@ How to use them:
 
 ### For the product (next iterations)
 
-1. **Show a recent-bias band and P10–P90 error bands** on the decision chart,
+1. *(Implemented.)* **Show a recent-bias band and P10–P90 error bands** on the decision chart,
    computed only from delivery days completed before the cutoff. This turns the
    accuracy view into decision support without changing the forecast itself.
-2. **Show a persistence-skill card** in the accuracy view, so users see that the
+2. *(Implemented.)* **Show a persistence-skill card** in the accuracy view, so users see that the
    forecast clearly beats a naive rule.
-3. **Add breakdowns by hour of day and wind level** to the accuracy view (the
+3. *(Implemented.)* **Add breakdowns by hour of day and wind level** to the accuracy view (the
    evaluation module already computes them).
-4. **Make the decision time and range shareable in the URL**, so analysts can
+4. *(Implemented.)* **Make the decision time and range shareable in the URL**, so analysts can
    send a link to a specific view.
 5. **Extend the data window to several months, including summer.** One winter
    month is a small sample, and the bias may be seasonal. The pipeline already

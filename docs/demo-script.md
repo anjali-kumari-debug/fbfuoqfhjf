@@ -48,7 +48,13 @@ Before recording:
 - That link opens the accuracy view for one day; actuals are clearly marked
   **retrospective**. Click **All of January**.
 - Headline cards: **MAE about 2,000 MW, bias +1,730 MW, 744 / 744 hours
-  matched**. The short guide explains each metric and the error sign.
+  matched**, plus **skill vs a naive baseline: 53%**. *"The forecast halves
+  the error of simply assuming the wind stays as it is."* The short guide
+  explains each metric and the error sign.
+- Scroll to **"Where are the misses largest?"**: by time of day (nights are
+  worst) and by wind level.
+- Click **Copy link to this view**: *"Any view can be shared with a
+  colleague."*
 - *"The key finding: forecasts were consistently **too high**, by about
   1.7 GW on average. If you bought only to cover the gap left by the
   forecast wind, you would usually have been short."* Show it in the
@@ -112,7 +118,7 @@ reasoning.
     because output can be near zero.
 
 ### 4. Quality and practices (3:30–5:00)
-- Run `pytest` live (134 tests). Highlight the tests for:
+- Run `pytest` live (139 tests). Highlight the tests for:
   - the cutoff boundary (10:00 is used, 10:01 is not);
   - missing data staying `null`;
   - 31 Jan → 1 Feb;

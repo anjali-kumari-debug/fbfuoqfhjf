@@ -72,17 +72,7 @@ def skill_score(mae_model: float | None, mae_baseline: float | None) -> float | 
 # ---------------------------------------------------------------- baseline
 
 
-def persistence_value(actuals: pd.DataFrame, decision_date: date, cutoff: time) -> float:
-    """Latest actual half-hour *published* at or before the cutoff (NaN if none).
-
-    This is information a trader really had at the cutoff, so the baseline has
-    no look-ahead.
-    """
-    cutoff_utc = analysis.cutoff_datetime(decision_date, cutoff)
-    known = actuals[(actuals["publish_time"] <= cutoff_utc) & actuals["generation_mw"].notna()]
-    if known.empty:
-        return float("nan")
-    return float(known.sort_values("start_time").iloc[-1]["generation_mw"])
+persistence_value = analysis.persistence_value  # shared with the API
 
 
 def hourly_table(actuals: pd.DataFrame, forecasts: pd.DataFrame, dates: list[date], cutoff: time) -> pd.DataFrame:
@@ -112,9 +102,7 @@ def lead_time_bucket(lead_hours: pd.Series) -> pd.Series:
                   labels=["<18 h", "18-24 h", "24-30 h", "30-36 h", ">=36 h"])
 
 
-def actual_level_bucket(actual: pd.Series) -> pd.Series:
-    return pd.cut(actual, bins=[0, 5000, 10000, 15000, np.inf], right=False,
-                  labels=["<5 GW", "5-10 GW", "10-15 GW", ">=15 GW"])
+actual_level_bucket = analysis.wind_level  # shared with the API
 
 
 # ---------------------------------------------------------------- what-if (not used by the app)

@@ -85,7 +85,7 @@ defaults to `10:00`, a demo assumption rather than a market rule.
 |---|---|
 | `GET /api/health` | `{"status": "ok"}` |
 | `GET /api/forecast?decision_date=2026-01-10&decision_time=10:00` | Decision cutoff with its timezone offset (and in UTC), delivery date, and for each hourly interval: target time, selected forecast, its publish time, the retrospective actual, the error (only for matched intervals) and the lead time. Also coverage, that day's metrics, and `recent_errors`: the forecast's track record over the previous 7 decisions (bias, MAE, P10/P90, P90 miss), using only actuals published by the cutoff. |
-| `GET /api/accuracy?start_date=2026-01-01&end_date=2026-01-31&decision_time=10:00` | Pooled MAE, RMSE, bias and percentiles over all matched intervals; a daily table with each date's own cutoff, metrics and coverage; expected / forecast / actual / matched interval counts; the error sign definition; the decision-time assumption; an error histogram. `start_date` and `end_date` default to the whole of January. |
+| `GET /api/accuracy?start_date=2026-01-01&end_date=2026-01-31&decision_time=10:00` | Pooled MAE, RMSE, bias and percentiles over all matched intervals; a daily table with each date's own cutoff, metrics and coverage; expected / forecast / actual / matched interval counts; the error sign definition; the decision-time assumption; skill against a naive persistence baseline (the latest actual published by each cutoff, compared on the same hours); breakdowns by time of day and by actual wind level; an error histogram. `start_date` and `end_date` default to the whole of January. |
 | `GET /api/accuracy/decision-times?start_date=&end_date=` | The same decision dates scored at 00:00, 02:30, 06:00, 10:00, 12:30, 16:00 and 20:00: coverage, MAE, RMSE, bias and P90 miss for each |
 | `GET /api/meta` | Decision-date range, default decision time and its label, method notes, data retrieval date, attribution |
 
@@ -115,7 +115,8 @@ docker build -t wind-forecast-desk .
 docker run --rm -p 8090:8000 wind-forecast-desk
 ```
 
-Open http://localhost:8090. The container listens on `$PORT` (default 8000),
+Open http://localhost:8090. Every view has a shareable URL (for example
+`/?view=accuracy&time=16:00&start=2026-01-10&end=2026-01-20`); use **Copy link to this view**. The container listens on `$PORT` (default 8000),
 as most container platforms expect.
 
 ### Option B: local development (two terminals)
@@ -148,8 +149,8 @@ to avoid the common defaults 5173 and 8000.
 
 | What | Where to run | Command |
 |---|---|---|
-| Backend tests (134: selection, cutoff boundary, missing data, timezones, metrics, API endpoints and validation, cleaning, retries, pipeline) | `backend/` | `../.venv/bin/python -m pytest` |
-| Frontend tests (7: London-time display and day labels, missing values, formatting) | `frontend/` | `npm test` |
+| Backend tests (139: selection, cutoff boundary, missing data, timezones, metrics, API endpoints and validation, cleaning, retries, pipeline) | `backend/` | `../.venv/bin/python -m pytest` |
+| Frontend tests (11: London-time display and day labels, missing values, formatting, shareable-link parsing) | `frontend/` | `npm test` |
 | Frontend lint | `frontend/` | `npm run lint` |
 | Production build | `frontend/` | `npm run build` |
 | Tests inside the Docker image | anywhere | `docker run --rm wind-forecast-desk python -m pytest -q -p no:cacheprovider` |
@@ -257,11 +258,12 @@ pipeline first, adding `httpx` to `pyproject.toml`:
 | `frontend/src/main.jsx` | React entry point |
 | `frontend/src/App.jsx` | Page layout: tabs, cutoff control with its demo-assumption label, method notes |
 | `frontend/src/components/DecisionView.jsx` | Decision view: what was known at the cutoff. January date picker, derived delivery date, forecast chart (tooltips show the publish time) with a likely-actual-range band from recent errors, recent bias and P90-miss cards, coverage, which publication was used, partial and empty states |
-| `frontend/src/components/AccuracyView.jsx` | Accuracy view: decision-date range selector, MAE / RMSE / bias / middle-80% / matched-interval cards with explanations, the retrospective actual-vs-forecast chart, a daily bias chart and table, an accuracy-by-decision-time table, partial and empty states |
+| `frontend/src/components/AccuracyView.jsx` | Accuracy view: decision-date range selector, MAE / RMSE / bias / middle-80% / matched-interval cards with explanations, the retrospective actual-vs-forecast chart, a daily bias chart and table, a skill-vs-baseline card, breakdowns by time of day and wind level, an accuracy-by-decision-time table, partial and empty states |
 | `frontend/src/components/StatTile.jsx`, `ChartTooltip.jsx`, `Notice.jsx` | Shared UI pieces: number cards (with an optional coverage meter), chart tooltips, status messages for partial, empty and error states |
 | `frontend/src/api.js`, `useApi.js` | API URLs and a fetch hook that cancels outdated requests |
 | `frontend/src/format.js` | London-time, MW and percentage formatting ("—" for missing values) |
 | `frontend/src/format.test.js` | Tests for `format.js` |
+| `frontend/src/urlState.js`, `urlState.test.js` | Shareable links: view, decision date, decision time and range in the URL (invalid values fall back to defaults), plus tests |
 | `frontend/src/theme.js` | Chart colours for light and dark mode, checked for colour-blind separation |
 | `frontend/src/App.css`, `index.css` | Styles |
 | `frontend/public/favicon.svg` | Browser tab icon |
