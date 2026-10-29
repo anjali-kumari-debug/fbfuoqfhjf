@@ -38,3 +38,6 @@ reint.doc
 .DS_Store
 .idea/
 .vscode/
+
+# --- Vercel ---
+.vercel/

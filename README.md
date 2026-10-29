@@ -12,7 +12,8 @@ Data: Elexon BMRS **WINDFOR** (wind forecasts, with every historical
 publication) and **FUELHH** (actual generation, `fuelType = WIND`). No other
 data is used.
 
-**Live app:** _to be added after Vercel deployment_
+**Live app:** https://fbfuoqfhjf.vercel.app  
+**Repository:** https://github.com/anjali-kumari-debug/fbfuoqfhjf
 
 ---
 
@@ -204,7 +205,9 @@ production setup locally.
 The processed data in `data/processed/` is included in the function and loaded
 once at startup. No request calls Elexon.
 
-From the project root (after `npx vercel login`):
+The project is connected to the GitHub repository, so every push to `main`
+redeploys production automatically. To deploy manually from the project root
+(after `npx vercel login`):
 
 ```bash
 npx vercel deploy --prod

@@ -19,12 +19,12 @@ Hour estimates are guides. Stop and review at the end of each stage.
       label, coverage) and accuracy view (MAE, RMSE, bias, error distribution).
 - [x] **6. Docker (1h):** multi-stage build. FastAPI serves `frontend/dist`.
       Run locally.
-- [ ] **7. Vercel deploy (1h):** FastAPI function + React build on the CDN, then check in incognito.
+- [x] **7. Vercel deploy (1h):** FastAPI function + React build on the CDN, then check in incognito.
       Done: `pyproject.toml`, `vercel.json`, `.vercelignore`, `.python-version`.
-      To do: `npx vercel login`, `npx vercel deploy --prod`, check in incognito.
-- [ ] **8. README + GitHub (1h):** directory guide, startup steps, URL,
+      Live: https://fbfuoqfhjf.vercel.app (checked logged-out). Pushes to `main` auto-deploy.
+- [x] **8. README + GitHub (1h):** directory guide, startup steps, URL,
       AI-assistance disclosure. Public repo with a random name.
-      Done: README written (Vercel URL still to fill in).
+      Done: README written with the live URL.
       Done: public repo https://github.com/anjali-kumari-debug/fbfuoqfhjf pushed.
 - [ ] **9. Demo video (2h):** at most 10 minutes (about 5 minutes pitch and
       about 5 minutes technical). Upload as unlisted on YouTube and check in
