@@ -1,7 +1,7 @@
 # Demo video script (10 minutes or less)
 
 Record as an **unlisted YouTube** video. Two parts of about 5 minutes each.
-Use the **deployed Heroku app** for Part 1 (it proves the deployment works).
+Use the **deployed Vercel app** for Part 1 (it proves the deployment works).
 Timings are targets. Say the bullet points in your own words; don't read them.
 
 Before recording:
@@ -72,7 +72,9 @@ reasoning.
 
 ### 1. Architecture (0:00–1:00)
 - Show the README architecture diagram. One Docker image: **FastAPI serves
-  the JSON API and the built React app**, deployed on Heroku with `heroku.yml`.
+  the JSON API and the built React app**. Locally it runs as one Docker image; on
+  Vercel the same FastAPI app runs as a Python function, and the React build is
+  served from the CDN (`vercel.json`, `pyproject.toml`).
 - **Reproducible data pipeline**: `python -m backend.app.fetch_data
   --decision-month 2026-01` fetches in bounded chunks with retries, preserves
   the raw responses, validates the data, reports conflicts and coverage, and
@@ -118,5 +120,5 @@ reasoning.
 ## After recording
 
 - Upload as **Unlisted**, and check the link in an **incognito** window.
-- Check that the GitHub repo is **public** and the Heroku app opens in an
+- Check that the GitHub repo is **public** and the Vercel app opens in an
   incognito window.

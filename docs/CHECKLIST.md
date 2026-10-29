@@ -19,12 +19,12 @@ Hour estimates are guides. Stop and review at the end of each stage.
       label, coverage) and accuracy view (MAE, RMSE, bias, error distribution).
 - [x] **6. Docker (1h):** multi-stage build. FastAPI serves `frontend/dist`.
       Run locally.
-- [ ] **7. Heroku deploy (1h):** container deploy, then check in incognito.
-      Done: `heroku.yml` added; amd64 image rehearsed locally.
-      To do: Heroku CLI + login, create app, push, check in incognito.
+- [ ] **7. Vercel deploy (1h):** FastAPI function + React build on the CDN, then check in incognito.
+      Done: `pyproject.toml`, `vercel.json`, `.vercelignore`, `.python-version`.
+      To do: `npx vercel login`, `npx vercel deploy --prod`, check in incognito.
 - [ ] **8. README + GitHub (1h):** directory guide, startup steps, URL,
       AI-assistance disclosure. Public repo with a random name.
-      Done: README written (Heroku URL still to fill in).
+      Done: README written (Vercel URL still to fill in).
       To do: `gh auth login`, create public repo `azoouh`, push.
 - [ ] **9. Demo video (2h):** at most 10 minutes (about 5 minutes pitch and
       about 5 minutes technical). Upload as unlisted on YouTube and check in

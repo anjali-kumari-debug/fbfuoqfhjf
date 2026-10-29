@@ -15,7 +15,8 @@ national WIND generation forecast available at their purchase-decision cutoff an
 - Backend: Python, FastAPI, pandas, httpx; tests with pytest.
 - Packaging: one Docker image. FastAPI serves the built React app (`frontend/dist`)
   and the JSON API from the same service.
-- Deployment: Heroku (container).
+- Deployment: Vercel (FastAPI as a Python function, React build served from the CDN).
+  Docker is kept for local runs and reproducibility; Vercel does not use it.
 - Repo: public GitHub repo with a random, anonymous name.
 
 ## Out of scope
@@ -78,7 +79,8 @@ frontend/    React + Vite app; npm test runs node:test (build output dist/ is gi
 data/        raw/ (ignored) and processed/ (committed)
 docs/        checklist, data notes, demo script (requirements.md is local only)
 Dockerfile   multi-stage: build frontend, then run FastAPI
-heroku.yml   Heroku builds the Dockerfile on its own servers
+vercel.json  Vercel build command and function bundle exclusions
+pyproject.toml  Vercel entrypoint (backend.app.main:app) and runtime dependencies
 ```
 
 Dev ports: frontend 5180, backend 8001 (other local projects use 5173/8000).
@@ -86,7 +88,7 @@ Dev ports: frontend 5180, backend 8001 (other local projects use 5173/8000).
 ## Deliverables
 
 - README: what each file and directory is for, how to start the app locally and
-  with Docker, the deployed Heroku URL, and an explicit statement of
+  with Docker, the deployed Vercel URL, and an explicit statement of
   Claude/AI assistance.
 - Demo video of 10 minutes or less: about 5 minutes client pitch plus about
   5 minutes technical walkthrough.

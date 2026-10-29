@@ -27,7 +27,7 @@ COPY data/ data/
 COPY --from=frontend /build/dist/ frontend/dist/
 
 # Optional: build-time retrieval instead of using committed processed data.
-# docker build --build-arg DECISION_MONTH=2026-01 .   (or set it in heroku.yml)
+# docker build --build-arg DECISION_MONTH=2026-01 .
 # Data is fetched once while the image is built, never per dashboard request.
 ARG DECISION_MONTH=""
 RUN if [ -n "$DECISION_MONTH" ]; then python -m backend.app.fetch_data --decision-month "$DECISION_MONTH"; fi \
@@ -39,6 +39,6 @@ RUN useradd --create-home appuser
 USER appuser
 
 WORKDIR /app/backend
-# Heroku sets $PORT at runtime; default to 8000 elsewhere.
+# Platforms that set $PORT are respected; default to 8000 elsewhere.
 EXPOSE 8000
 CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

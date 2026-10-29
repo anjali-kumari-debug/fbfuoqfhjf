@@ -256,7 +256,7 @@ stored as UTC ISO strings ending in `Z`; missing values are empty.
   the app footer.
 - **Fallback if redistribution is unsuitable:** remove `data/processed/` from
   git and build with `DECISION_MONTH=2026-01` (a Docker build argument, or
-  `heroku.yml` `config`). The data is then fetched once at image build time,
+  the Vercel build command). The data is then fetched once at build time,
   never per request.
 
 ## Raw files in `data/raw/` (gitignored)

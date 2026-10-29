@@ -1,0 +1,15 @@
+# Vercel deployment metadata. Local development and Docker use backend/requirements.txt.
+# Only the packages the deployed API imports are listed (no pytest, httpx or uvicorn).
+[project]
+name = "wind-forecast-desk"
+version = "1.0.0"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "fastapi==0.162.0",
+    "pandas==3.1.0",
+    "tzdata==2026.6",
+]
+
+[tool.vercel]
+# Vercel loads the FastAPI instance `app` from backend/app/main.py.
+entrypoint = "backend.app.main:app"

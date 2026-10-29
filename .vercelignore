@@ -1,0 +1,23 @@
+# Files never uploaded to Vercel by `vercel deploy` (mirrors .gitignore).
+.git
+.venv
+venv
+**/__pycache__
+**/.pytest_cache
+.DS_Store
+.vscode
+.idea
+
+frontend/node_modules
+frontend/dist
+
+data/raw
+
+.env
+.env.*
+!.env.example
+
+# Locally copied challenge document (private)
+docs/requirements.md
+reint pdf.pdf
+reint.doc

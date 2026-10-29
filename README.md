@@ -12,7 +12,7 @@ Data: Elexon BMRS **WINDFOR** (wind forecasts, with every historical
 publication) and **FUELHH** (actual generation, `fuelType = WIND`). No other
 data is used.
 
-**Live app:** _to be added after Heroku deployment_
+**Live app:** _to be added after Vercel deployment_
 
 ---
 
@@ -63,7 +63,8 @@ Browser ◀── React (built static files) ◀── FastAPI ── app/analys
 ```
 
 - **One service.** FastAPI serves both the JSON API (`/api/...`) and the built
-  React app (`/`). One Docker image is deployed to Heroku.
+  React app (`/`). The same app runs in one Docker image locally and as one
+  Vercel Function in production (the React build is served from Vercel's CDN).
 - **Offline data preparation.** One command fetches, preserves, validates and
   documents the data. The app reads only `data/processed/` and **never calls
   Elexon at request time**, so the demo is reproducible.
@@ -99,7 +100,7 @@ defaults to `10:00`, a demo assumption rather than a market rule.
 
 Prerequisites: Python 3.13, Node.js 22+, Docker (optional).
 
-### Option A: Docker (closest to production)
+### Option A: Docker (one image with the UI and API)
 
 From the project root:
 
@@ -109,7 +110,7 @@ docker run --rm -p 8090:8000 wind-forecast-desk
 ```
 
 Open http://localhost:8090. The container listens on `$PORT` (default 8000),
-as Heroku requires.
+as most container platforms expect.
 
 ### Option B: local development (two terminals)
 
@@ -187,31 +188,32 @@ If redistribution were not suitable, nothing else changes: delete
 `data/processed/` from the repository and build the image with
 `DECISION_MONTH`. The data is then fetched once at build time (see Deployment).
 
-## Deployment (Heroku)
+## Deployment (Vercel)
 
-`heroku.yml` tells Heroku to build the `Dockerfile` on its own servers (amd64)
-and run it as the `web` process.
+Vercel runs the FastAPI app as a Python function and serves the built React app
+from its CDN. Docker is not used on Vercel; it remains the way to run the
+production setup locally.
+
+| File | Role |
+|---|---|
+| `pyproject.toml` | `[tool.vercel] entrypoint = "backend.app.main:app"`, plus the runtime dependencies only |
+| `.python-version` | Python 3.13 |
+| `vercel.json` | Build command (`cd frontend && npm ci && npm run build`), and keeps `node_modules`, tests, raw data and docs out of the function bundle |
+| `.vercelignore` | Keeps local-only and private files (virtual env, raw data, challenge document) from being uploaded |
+
+The processed data in `data/processed/` is included in the function and loaded
+once at startup. No request calls Elexon.
+
+From the project root (after `npx vercel login`):
 
 ```bash
-heroku create <app-name>
-heroku stack:set container
-git push heroku main
+npx vercel deploy --prod
 ```
 
-The image uses the committed `data/processed/`. To fetch at build time instead
-(the data stays out of the repository), add this to `heroku.yml`:
-
-```yaml
-build:
-  docker:
-    web: Dockerfile
-  config:
-    DECISION_MONTH: 2026-01
-```
-
-Locally, the same option is `docker build --build-arg DECISION_MONTH=2026-01 .`.
-The build fails with a clear message if there is neither committed data nor
-`DECISION_MONTH`.
+If redistributing the processed data were not allowed, remove
+`data/processed/` from the repository and make the build command run the
+pipeline first, adding `httpx` to `pyproject.toml`:
+`python -m backend.app.fetch_data --decision-month 2026-01 && cd frontend && npm ci && npm run build`.
 
 ## Files and directories
 
@@ -221,7 +223,10 @@ The build fails with a clear message if there is neither committed data nor
 | `CLAUDE.md` | Project rules and conventions used while building (data rules, stack, workflow) |
 | `Dockerfile` | Multi-stage build: Node builds the React app, then a Python image serves it with FastAPI (optional build-time data fetch with `DECISION_MONTH`) |
 | `.dockerignore` | Keeps local-only files (virtual env, `node_modules`, raw data, secrets) out of the image |
-| `heroku.yml` | Heroku container build configuration |
+| `pyproject.toml` | Vercel entrypoint and runtime dependencies |
+| `.python-version` | Python version for Vercel (3.13) |
+| `vercel.json` | Vercel build command and function bundle exclusions |
+| `.vercelignore` | Files never uploaded to Vercel |
 | `.gitignore` | Excludes virtual envs, `node_modules`, caches, `.env` files, `frontend/dist`, `data/raw` and the private challenge document |
 | **backend/** | |
 | `backend/requirements.txt` | Pinned Python dependencies |
@@ -275,7 +280,7 @@ Claude Code**. Claude helped with:
 
 - planning the stages;
 - inspecting the Elexon API documentation and responses;
-- writing the backend, frontend, tests, Docker and Heroku configuration, and
+- writing the backend, frontend, tests, Docker and Vercel configuration, and
   documentation.
 
 All work was directed, reviewed and run step by step by the author. The data
