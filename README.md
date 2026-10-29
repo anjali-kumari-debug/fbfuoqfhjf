@@ -54,18 +54,19 @@ limitations and comparability notes.
 ## Architecture
 
 ```
-Elexon API ──(scripts/build_snapshot.py, run once)──▶ data/snapshot/*.csv  (committed)
-                                                            │
-                                                            ▼
+Elexon API ──(python -m backend.app.fetch_data, run once)──▶ data/raw/      (original responses, gitignored)
+                                                             data/processed/ (normalised CSV + manifest)
+                                                                   │
+                                                                   ▼
 Browser ◀── React (built static files) ◀── FastAPI ── app/analysis.py (selection, metrics)
                  └──────── /api/* JSON ────────┘
 ```
 
 - **One service.** FastAPI serves both the JSON API (`/api/...`) and the built
   React app (`/`). One Docker image is deployed to Heroku.
-- **Committed snapshot.** The app and tests run from `data/snapshot/` and never
-  call Elexon at runtime, so the demo is reproducible. A script rebuilds the
-  snapshot from the API.
+- **Offline data preparation.** One command fetches, preserves, validates and
+  documents the data. The app reads only `data/processed/` and **never calls
+  Elexon at request time**, so the demo is reproducible.
 - **Pure core logic.** `backend/app/analysis.py` contains no web code, which
   makes the forecast-selection and metric rules easy to test.
 
@@ -74,7 +75,7 @@ Browser ◀── React (built static files) ◀── FastAPI ── app/analys
 | Endpoint | Returns |
 |---|---|
 | `GET /api/health` | `{"status": "ok"}` |
-| `GET /api/meta` | Date range, default cutoff with its demo-assumption label, method notes, snapshot date |
+| `GET /api/meta` | Date range, default cutoff with its demo-assumption label, method notes, data retrieval date, attribution |
 | `GET /api/decision?date=2026-01-15&cutoff=10:00` | Per-hour forecast, publish time used, actual, error and lead time, plus coverage and metrics for that decision |
 | `GET /api/accuracy?cutoff=10:00` | Per-day table, overall metrics and coverage, error histogram for all January decisions |
 
@@ -127,23 +128,51 @@ to avoid the common defaults 5173 and 8000.
 
 | What | Where to run | Command |
 |---|---|---|
-| Backend tests (61: selection, cutoff boundary, missing data, timezones, metrics, API) | `backend/` | `../.venv/bin/python -m pytest` |
+| Backend tests (82: selection, cutoff boundary, missing data, timezones, metrics, API, cleaning, retries, pipeline) | `backend/` | `../.venv/bin/python -m pytest` |
 | Frontend tests (6: London-time display, missing values, formatting) | `frontend/` | `npm test` |
 | Frontend lint | `frontend/` | `npm run lint` |
 | Production build | `frontend/` | `npm run build` |
 | Tests inside the Docker image | anywhere | `docker run --rm wind-forecast-desk python -m pytest -q -p no:cacheprovider` |
 
-### Rebuilding the data snapshot (optional)
+## Data preparation pipeline
 
-From `backend/`:
+From the repository root (with the virtual environment active, or using
+`.venv/bin/python`):
 
 ```bash
-../.venv/bin/python -m scripts.build_snapshot
+python -m backend.app.fetch_data --decision-month 2026-01
 ```
 
-This downloads WINDFOR publications (28 Dec 2025 to 31 Jan 2026) and FUELHH WIND
-actuals (1 Jan to 2 Feb 2026) in 7-day chunks, cleans them, and rewrites
-`data/snapshot/`. Raw downloads go to `data/raw/`, which is gitignored.
+| Step | Behaviour |
+|---|---|
+| Date ranges | Worked out from the month. Delivery days are 2 Jan to 1 Feb. Forecast publications are fetched from 28 Dec, 4 days before the first decision (`--lookback-days`), to the end of 31 Jan. Actuals cover settlement dates 1 Jan to 2 Feb. |
+| Requests | 7-day chunks, a 60 s timeout, and up to 4 attempts on timeouts, connection errors, 429 and 5xx, with waits that double each time (capped). Client errors such as 400 fail immediately. |
+| Raw preservation | Each response body is saved unchanged to `data/raw/<month>/` (gitignored), with its SHA-256 in the manifest. |
+| Normalisation | FUELHH is filtered to `WIND`. Timestamps are timezone-aware and written as UTC `...Z`. Older publications are kept, because filtering is on the target hour, not the publish time. |
+| Validation | Unparseable timestamps, or timestamps off the 30-minute / hourly grid, are removed and counted. Non-numeric and non-finite MW values become missing and are counted; negative values are flagged. Settlement date and period are checked against `startTime`. |
+| Duplicates | Exact duplicates are removed. **Conflicting duplicates are reported in the manifest.** A conflicting actual is resolved only by a later revision (a later `publishTime`); otherwise the value is set to missing, never picked arbitrarily. |
+| Missing data | Preserved as empty values; nothing is filled or interpolated. |
+| Outputs | `data/processed/actuals.csv`, `forecasts.csv` and `manifest.json`. The manifest records the source URLs, every request with its range and retrieval time, row counts, cleaning counts, actual and forecast coverage, the assumptions, and file fingerprints. |
+
+For January 2026: 10 requests; 1,584 → 1,488 actual rows; 20,440 → 17,864
+forecast rows from 256 publications. There were no duplicates, conflicts or
+invalid values, and 100% actual and forecast coverage.
+
+## Data licence and attribution
+
+Contains BMRS data © Elexon Limited copyright and database right 2026.
+[Licence](https://www.elexon.co.uk/data/balancing-mechanism-reporting-agent/copyright-licence-bmrs-data/).
+This project is not endorsed by Elexon.
+
+The processed January 2026 data (about 1 MB) is committed so that the demo and
+tests are reproducible. Elexon's BMRS open-data licence, as summarised by
+Elexon, allows copying, adaptation and commercial re-use **with this
+attribution**. The attribution appears here, in `data/README.md`, in the
+manifest and in the app footer.
+
+If redistribution were not suitable, nothing else changes: delete
+`data/processed/` from the repository and build the image with
+`DECISION_MONTH`. The data is then fetched once at build time (see Deployment).
 
 ## Deployment (Heroku)
 
@@ -156,13 +185,28 @@ heroku stack:set container
 git push heroku main
 ```
 
+The image uses the committed `data/processed/`. To fetch at build time instead
+(the data stays out of the repository), add this to `heroku.yml`:
+
+```yaml
+build:
+  docker:
+    web: Dockerfile
+  config:
+    DECISION_MONTH: 2026-01
+```
+
+Locally, the same option is `docker build --build-arg DECISION_MONTH=2026-01 .`.
+The build fails with a clear message if there is neither committed data nor
+`DECISION_MONTH`.
+
 ## Files and directories
 
 | Path | Purpose |
 |---|---|
 | `README.md` | This file |
 | `CLAUDE.md` | Project rules and conventions used while building (data rules, stack, workflow) |
-| `Dockerfile` | Multi-stage build: Node builds the React app, then a Python image serves it with FastAPI |
+| `Dockerfile` | Multi-stage build: Node builds the React app, then a Python image serves it with FastAPI (optional build-time data fetch with `DECISION_MONTH`) |
 | `.dockerignore` | Keeps local-only files (virtual env, `node_modules`, raw data, secrets) out of the image |
 | `heroku.yml` | Heroku container build configuration |
 | `.gitignore` | Excludes virtual envs, `node_modules`, caches, `.env` files, `frontend/dist`, `data/raw` and the private challenge document |
@@ -171,11 +215,12 @@ git push heroku main
 | `backend/pytest.ini` | pytest configuration |
 | `backend/app/main.py` | FastAPI app: input validation, JSON endpoints, serving the built frontend |
 | `backend/app/analysis.py` | Core logic: delivery-day hours, forecast selection at the cutoff, hourly alignment, coverage, metrics |
-| `backend/app/elexon.py` | Elexon API client (7-day chunks) and data cleaning (WIND only, UTC parsing, duplicates, counted removals) |
-| `backend/scripts/build_snapshot.py` | Rebuilds `data/snapshot/` from the API and writes a quality report |
-| `backend/tests/test_analysis.py` | Tests for selection, cutoff boundary, missing data, timezones and clock changes, 31 Jan → 1 Feb, metrics, plus checks on the real snapshot |
+| `backend/app/elexon.py` | Elexon API client (bounded chunks, timeouts, bounded retries) and cleaning (WIND filter, UTC parsing, validation, duplicate and conflict handling) |
+| `backend/app/fetch_data.py` | Data pipeline CLI (`python -m backend.app.fetch_data --decision-month 2026-01`): plans ranges, fetches, preserves raw, cleans, writes processed CSVs and the manifest |
+| `backend/tests/test_analysis.py` | Tests for selection, cutoff boundary, missing data, timezones and clock changes, 31 Jan → 1 Feb, metrics, plus checks on the real processed data |
 | `backend/tests/test_api.py` | API tests: responses, validation (422), `null` rather than NaN in JSON, static frontend serving |
-| `backend/tests/test_elexon_clean.py` | Cleaning tests: WIND filter, duplicates, window edges, missing values and timestamps |
+| `backend/tests/test_elexon_clean.py` | Cleaning tests: WIND filter, exact duplicates vs conflicts, validation, grid checks, older publications kept, missing values |
+| `backend/tests/test_fetch_data.py` | Pipeline tests against a fake API: date planning, retries and their limits, raw files preserved byte for byte, chunk sizes, manifest, coverage without filling gaps |
 | **frontend/** | |
 | `frontend/package.json`, `package-lock.json` | Node dependencies (React, Recharts, Vite) and scripts |
 | `frontend/vite.config.js` | Vite config: dev port 5180, `/api` proxy to the backend |
@@ -193,10 +238,11 @@ git push heroku main
 | `frontend/public/favicon.svg` | Browser tab icon |
 | `frontend/.oxlintrc.json` | Lint rules |
 | **data/** | |
-| `data/snapshot/actuals.csv` | Half-hourly WIND actuals, 2 Jan to 1 Feb 2026 London (1,488 rows) |
-| `data/snapshot/forecasts.csv` | Every WINDFOR publication covering those days (256 publications, 17,864 rows) |
-| `data/snapshot/metadata.json` | Download ranges, row counts and data-quality report |
-| `data/raw/` | Raw API downloads and documentation captures (local only, gitignored) |
+| `data/README.md` | Data folders, how to recreate them, source attribution |
+| `data/processed/actuals.csv` | Half-hourly WIND actuals, 2 Jan to 1 Feb 2026 London (1,488 rows) |
+| `data/processed/forecasts.csv` | Every WINDFOR publication covering those days (256 publications, 17,864 rows) |
+| `data/processed/manifest.json` | Sources, request ranges, retrieval times, row counts, cleaning and coverage report, assumptions |
+| `data/raw/` | Original API responses and documentation captures (local only, gitignored) |
 | **docs/** | |
 | `docs/data-notes.md` | Verified Elexon endpoint details, field meanings, limitations, publish vs target time, dataset comparability |
 | `docs/CHECKLIST.md` | Stage-by-stage implementation checklist |

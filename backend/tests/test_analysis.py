@@ -222,7 +222,7 @@ def test_coverage_counts_missing_hours():
 
 @pytest.fixture(scope="module")
 def snapshot():
-    return analysis.load_snapshot()
+    return analysis.load_data()
 
 
 JANUARY = [date(2026, 1, d) for d in range(1, 32)]

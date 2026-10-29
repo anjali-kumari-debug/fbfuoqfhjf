@@ -146,10 +146,13 @@ Checked on the full January downloads (1,584 FUELHH rows; 20,440 WINDFOR rows):
 - **Documented:** the schema marks **every field as nullable**, including
   FUELHH `startTime`. January has no nulls, but the cleaning code handles
   them anyway:
-  - rows without a usable timestamp are removed **and counted** in the
-    snapshot report;
-  - a null `generation` stays as a missing value, never 0;
-  - for duplicates, the latest `publishTime` wins.
+  - rows without a usable timestamp, or off the 30-minute / hourly grid,
+    are removed **and counted** in the manifest;
+  - a null, non-numeric or non-finite `generation` becomes missing (never 0)
+    and is counted; negative values are kept but flagged;
+  - exact duplicates are removed; **conflicting duplicates are reported**. An
+    actual is resolved only by a later revision; anything else becomes
+    missing.
 
 ## Request-size and date-range limits
 
@@ -165,7 +168,8 @@ Checked on the full January downloads (1,584 FUELHH rows; 20,440 WINDFOR rows):
 - **Our choice:** still download in 7-day chunks. It's cheap, keeps each
   request small, and is safe if an undocumented limit exists or is added
   later.
-- **Documented:** 429 *Too many requests*. A snapshot rebuild makes only about
+- **Documented:** 429 *Too many requests*. The pipeline retries 429 and 5xx
+  responses up to 4 attempts with waits that grow each time; a full month is
   10 requests.
 
 ## Comparability between the two datasets
@@ -215,22 +219,45 @@ Elexon's documentation, they are **broadly comparable**, with known limits:
   missing, never filled in.
 - **Expected intervals per delivery day** are counted from Europe/London day
   boundaries (23, 24 or 25 hours), never hard-coded.
-- **Fetch ranges for the snapshot:**
+- **Fetch ranges** (derived from `--decision-month 2026-01`):
   - WINDFOR publish times: 2025-12-28T00:00 to 2026-02-01T00:00 London.
   - FUELHH settlement dates: 2026-01-01 to 2026-02-02, then filtered by
     `startTime` to the delivery window (2 Jan to 1 Feb London).
 
-## Snapshot (`data/snapshot/`)
+## Processed data (`data/processed/`)
 
-Built with `python -m scripts.build_snapshot`, run from `backend/`.
-Timestamps are stored as UTC ISO strings ending in `Z`.
+Built from the repository root with
+`python -m backend.app.fetch_data --decision-month 2026-01`. Timestamps are
+stored as UTC ISO strings ending in `Z`; missing values are empty.
 
-- `actuals.csv`: `start_time, generation_mw`. All 1,488 half-hours from 2 Jan
-  to 1 Feb 2026 are present.
+- `actuals.csv`: `start_time, generation_mw, publish_time, settlement_date,
+  settlement_period`. All 1,488 half-hours from 2 Jan to 1 Feb 2026 are
+  present.
 - `forecasts.csv`: `publish_time, start_time, generation_mw`. 256 publications
-  with at least one hour in the delivery window; 17,864 rows; no missing
-  values.
-- `metadata.json`: download ranges, row counts and the quality report.
+  (the earliest is 31 Dec 2025 02:30 UTC) with at least one hour in the
+  delivery window; 17,864 rows; no missing values.
+- `manifest.json`: source URLs, every request (URL, parameters, retrieval
+  time, attempts, SHA-256 of the raw body), row counts, cleaning counts, conflict
+  examples, actual and forecast coverage, assumptions, and output fingerprints.
+
+## Licence and redistribution
+
+- Elexon's "Licence to use BMRS open data" (as summarised by Elexon) grants a
+  worldwide, royalty-free, perpetual, non-exclusive licence to copy, adapt and
+  commercially exploit BMRS data. Conditions: the attribution
+  **"Contains BMRS data © Elexon Limited copyright and database right
+  [year]"**, a link to the licence where possible, and no implied endorsement
+  or misrepresentation.
+- **Verification status:** the licence page sits behind a bot check that
+  blocks automated access, so its full text was not read directly. The
+  summary above comes from Elexon's page as shown in search results. Confirm
+  the wording in a browser before publishing.
+- The attribution is shown in the README, `data/README.md`, the manifest and
+  the app footer.
+- **Fallback if redistribution is unsuitable:** remove `data/processed/` from
+  git and build with `DECISION_MONTH=2026-01` (a Docker build argument, or
+  `heroku.yml` `config`). The data is then fetched once at image build time,
+  never per request.
 
 ## Raw files in `data/raw/` (gitignored)
 
@@ -241,4 +268,5 @@ Timestamps are stored as UTC ISO strings ending in `Z`.
 | `page_wind-generation.html`, `page_generation-by-fuel-type.html` | Rendered Insights pages with the dataset descriptions quoted above |
 | `sample_fuelhh.json`, `sample_windfor.json` | First small samples: 1 day of actuals, 12 h of forecast publications |
 | `probe_*.json` | Range-limit, filter-combination, fuel-type and no-filter probes |
-| `fuelhh_wind.json`, `windfor.json` | Full January downloads used to build the snapshot |
+| `fuelhh_wind.json`, `windfor.json` | Earlier merged January downloads (from the first version of the script) |
+| `2026-01/*.json` | Original response bodies from the pipeline, one file per request (fingerprints in the manifest) |

@@ -103,8 +103,9 @@ function MethodNotes({ meta }) {
           <strong>Missing data</strong> is shown as a gap or "—" and counted in coverage. It is never filled in.
         </li>
         <li>
-          <strong>Data:</strong> Elexon BMRS FUELHH (WIND) actuals and WINDFOR forecasts, from a snapshot taken{' '}
-          {meta.snapshot_generated_at_utc?.slice(0, 10)}. All times shown in {meta.timezone} time.
+          <strong>Data:</strong> Elexon BMRS FUELHH (WIND) actuals and WINDFOR forecasts, retrieved{' '}
+          {meta.data_retrieved_at_utc?.slice(0, 10)} and prepared offline (the dashboard never calls Elexon). All
+          times shown in {meta.timezone} time.
         </li>
         <li>
           <strong>Coverage of the data:</strong> both datasets cover wind farms with operational metering on the
@@ -115,6 +116,16 @@ function MethodNotes({ meta }) {
           This tool reports forecasts and their errors. It does not recommend how much power to buy.
         </li>
       </ul>
+      {meta.attribution && (
+        <p className="small attribution">
+          {meta.attribution}{' '}
+          {meta.licence_url && (
+            <a href={meta.licence_url} target="_blank" rel="noreferrer">
+              Licence
+            </a>
+          )}
+        </p>
+      )}
     </footer>
   )
 }

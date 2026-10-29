@@ -25,16 +25,17 @@ import pandas as pd
 LONDON = ZoneInfo("Europe/London")
 DEFAULT_CUTOFF = time(10, 0)  # demo assumption, not a market rule
 PERCENTILES = (10, 25, 50, 75, 90)
-SNAPSHOT_DIR = Path(__file__).resolve().parents[2] / "data" / "snapshot"
+# Written by `python -m backend.app.fetch_data`; the app never calls Elexon itself.
+DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "processed"
 
 
 # ---------------------------------------------------------------- loading
 
 
-def load_snapshot(snapshot_dir: Path = SNAPSHOT_DIR) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Read actuals.csv and forecasts.csv with timezone-aware UTC timestamps."""
-    actuals = pd.read_csv(snapshot_dir / "actuals.csv")
-    forecasts = pd.read_csv(snapshot_dir / "forecasts.csv")
+def load_data(data_dir: Path = DATA_DIR) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Read processed actuals.csv and forecasts.csv with timezone-aware UTC timestamps."""
+    actuals = pd.read_csv(data_dir / "actuals.csv")
+    forecasts = pd.read_csv(data_dir / "forecasts.csv")
     for df in (actuals, forecasts):
         for col in ("start_time", "publish_time"):
             if col in df:

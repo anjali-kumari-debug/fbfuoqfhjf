@@ -65,16 +65,17 @@ about how much power to buy. We report forecasts and their errors only.
 ## Reproducibility
 
 - Raw API downloads go in `data/raw/` (gitignored).
-- A small, cleaned historical snapshot is committed in `data/snapshot/`,
+- Normalised data is committed in `data/processed/` (with Elexon attribution),
   so the demo and tests run without calling Elexon.
-- A script re-creates the snapshot from the API.
+- `python -m backend.app.fetch_data --decision-month 2026-01` (from the repo root)
+  re-creates it, preserving original responses in `data/raw/` and writing a manifest.
 
 ## Layout
 
 ```
-backend/     FastAPI app (app/), snapshot script (scripts/), pytest tests (tests/)
+backend/     FastAPI app and data pipeline (app/), pytest tests (tests/)
 frontend/    React + Vite app; npm test runs node:test (build output dist/ is gitignored)
-data/        raw/ (ignored) and snapshot/ (committed)
+data/        raw/ (ignored) and processed/ (committed)
 docs/        checklist, data notes, demo script (requirements.md is local only)
 Dockerfile   multi-stage: build frontend, then run FastAPI
 heroku.yml   Heroku builds the Dockerfile on its own servers

@@ -1,4 +1,4 @@
-"""FastAPI app: JSON API over the committed snapshot, plus the built React app.
+"""FastAPI app: JSON API over the processed Elexon data, plus the built React app.
 
 Run from backend/:  ../.venv/bin/uvicorn app.main:app --reload
 Interactive docs:   http://127.0.0.1:8000/docs
@@ -21,7 +21,7 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 
-from app import analysis
+from . import analysis
 
 FRONTEND_DIST = Path(
     os.environ.get("FRONTEND_DIST", Path(__file__).resolve().parents[2] / "frontend" / "dist")
@@ -34,9 +34,9 @@ app = FastAPI(title="Wind forecast accuracy API", version="1.0.0")
 
 
 @lru_cache
-def snapshot() -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Load the snapshot once and reuse it for every request."""
-    return analysis.load_snapshot()
+def dataset() -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Load data/processed once and reuse it for every request (no API calls at request time)."""
+    return analysis.load_data()
 
 
 # ---------------------------------------------------------------- input checks
@@ -118,7 +118,7 @@ def health() -> dict:
 
 @app.get("/api/meta")
 def meta() -> dict:
-    snapshot_info = json.loads((analysis.SNAPSHOT_DIR / "metadata.json").read_text())
+    manifest = json.loads((analysis.DATA_DIR / "manifest.json").read_text())
     return {
         "first_decision_date": FIRST_DECISION_DATE.isoformat(),
         "last_decision_date": LAST_DECISION_DATE.isoformat(),
@@ -134,8 +134,10 @@ def meta() -> dict:
             "For each delivery hour, the forecast with the latest publish time at or "
             "before the decision cutoff. Actuals are never used to choose forecasts."
         ),
-        "snapshot_generated_at_utc": snapshot_info.get("generated_at_utc"),
-        "source": snapshot_info.get("source"),
+        "data_retrieved_at_utc": manifest.get("generated_at_utc"),
+        "source": manifest.get("source", {}).get("base_url"),
+        "attribution": manifest.get("source", {}).get("attribution"),
+        "licence_url": manifest.get("source", {}).get("licence"),
     }
 
 
@@ -146,7 +148,7 @@ def decision(
 ) -> dict:
     d = parse_decision_date(date_)
     cut = parse_cutoff_param(cutoff)
-    actuals, forecasts = snapshot()
+    actuals, forecasts = dataset()
     table = analysis.decision_table(actuals, forecasts, d, cut)
 
     hours = table.reset_index()
@@ -173,7 +175,7 @@ def accuracy(
     cutoff: str = Query(analysis.DEFAULT_CUTOFF.strftime("%H:%M"), description="HH:MM, Europe/London"),
 ) -> dict:
     cut = parse_cutoff_param(cutoff)
-    actuals, forecasts = snapshot()
+    actuals, forecasts = dataset()
     result = analysis.accuracy(actuals, forecasts, decision_dates(), cut)
     return {
         "cutoff_local": cut.strftime("%H:%M"),

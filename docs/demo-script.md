@@ -66,8 +66,10 @@ reasoning.
 ### 1. Architecture (0:00–1:00)
 - Show the README architecture diagram. One Docker image: **FastAPI serves
   the JSON API and the built React app**, deployed on Heroku with `heroku.yml`.
-- **Committed snapshot** of Elexon data, so the demo and tests are
-  reproducible. `scripts/build_snapshot.py` rebuilds it from the API.
+- **Reproducible data pipeline**: `python -m backend.app.fetch_data
+  --decision-month 2026-01` fetches in bounded chunks with retries, preserves
+  the raw responses, validates the data, reports conflicts and coverage, and
+  writes a manifest. The app never calls Elexon at request time.
 
 ### 2. Data understanding (1:00–2:00)
 - Open `docs/data-notes.md`. The API details were verified against the docs
@@ -92,7 +94,7 @@ reasoning.
     because output can be near zero.
 
 ### 4. Quality and practices (3:30–5:00)
-- Run `pytest` live (61 tests). Highlight the tests for:
+- Run `pytest` live (82 tests). Highlight the tests for:
   - the cutoff boundary (10:00 is used, 10:01 is not);
   - missing data staying `null`;
   - 31 Jan → 1 Feb;

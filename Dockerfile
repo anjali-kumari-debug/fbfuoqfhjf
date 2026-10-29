@@ -21,10 +21,18 @@ WORKDIR /app
 COPY backend/requirements.txt backend/requirements.txt
 RUN pip install -r backend/requirements.txt
 
-# Same layout as the repo, so the code finds data/snapshot and frontend/dist.
+# Same layout as the repo, so the code finds data/processed and frontend/dist.
 COPY backend/ backend/
-COPY data/snapshot/ data/snapshot/
+COPY data/ data/
 COPY --from=frontend /build/dist/ frontend/dist/
+
+# Optional: build-time retrieval instead of using committed processed data.
+# docker build --build-arg DECISION_MONTH=2026-01 .   (or set it in heroku.yml)
+# Data is fetched once while the image is built, never per dashboard request.
+ARG DECISION_MONTH=""
+RUN if [ -n "$DECISION_MONTH" ]; then python -m backend.app.fetch_data --decision-month "$DECISION_MONTH"; fi \
+ && test -f data/processed/manifest.json \
+ || (echo "No data/processed found: commit it or build with --build-arg DECISION_MONTH=YYYY-MM" && exit 1)
 
 # Run as an unprivileged user.
 RUN useradd --create-home appuser
