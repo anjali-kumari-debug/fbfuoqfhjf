@@ -14,12 +14,12 @@ export default function AccuracyView({ cutoff, onSelectDay }) {
   if (error) return <p className="error">Could not load accuracy: {error.message}</p>
   if (!data) return <p className="muted">Loading…</p>
 
-  const { overall } = data
+  const overall = data.pooled
   const days = data.days.map((d) => ({ ...d, label: shortDate(d.delivery_date) }))
 
   return (
     <section className={loading ? 'stale' : undefined}>
-      <h2>Forecast accuracy for every January decision at {data.cutoff_local}</h2>
+      <h2>Forecast accuracy for every January decision at {data.decision_time}</h2>
       <p className="muted">
         Each decision uses the latest forecast available at its cutoff, scored against what was actually generated
         the next day. Change the cutoff above to see how forecast age affects accuracy.
@@ -36,8 +36,8 @@ export default function AccuracyView({ cutoff, onSelectDay }) {
         />
         <StatTile
           label="Coverage"
-          value={percent(overall.paired_coverage)}
-          hint={`${overall.paired_hours} of ${overall.expected_hours} hours scored`}
+          value={percent(overall.matched_coverage)}
+          hint={`${overall.matched_intervals} of ${overall.expected_intervals} hours scored`}
         />
       </div>
 
@@ -72,7 +72,7 @@ function dayTooltip() {
           d && [
             ['MAE', mw(d.mae_mw)],
             ['Bias', signedMw(d.bias_mw)],
-            ['Scored hours', `${d.paired_hours} of ${d.expected_hours}`],
+            ['Scored hours', `${d.matched_intervals} of ${d.expected_intervals}`],
             ['', 'Click to open this day'],
           ]
         }
@@ -209,7 +209,7 @@ function DailyTable({ days, onSelectDay }) {
             <td>{signedMw(d.bias_mw)}</td>
             <td>{mw(d.rmse_mw)}</td>
             <td>
-              {d.paired_hours} of {d.expected_hours}
+              {d.matched_intervals} of {d.expected_intervals}
             </td>
           </tr>
         ))}

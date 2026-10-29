@@ -31,7 +31,7 @@ function Dashboard({ meta }) {
   // The tab lives in the URL hash (#decision / #accuracy) so links and refreshes keep the view.
   const [tab, setTabState] = useState(() => (TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'decision'))
   const [date, setDate] = useState(meta.first_decision_date)
-  const [cutoff, setCutoff] = useState(meta.default_cutoff)
+  const [cutoff, setCutoff] = useState(meta.default_decision_time)
 
   const setTab = (next) => {
     history.replaceState(null, '', `#${next}`)
@@ -62,7 +62,7 @@ function Dashboard({ meta }) {
             value={cutoff}
             onChange={(e) => VALID_CUTOFF.test(e.target.value) && setCutoff(e.target.value)}
           />
-          <span className="badge" title={meta.cutoff_note}>
+          <span className="badge" title={meta.decision_time_note}>
             Demo assumption, not a market rule
           </span>
         </label>
@@ -97,7 +97,7 @@ function MethodNotes({ meta }) {
           <strong>Matching resolutions:</strong> {meta.alignment_note}
         </li>
         <li>
-          <strong>Error:</strong> {meta.error_convention}. MAPE is not used because wind output can be close to zero.
+          <strong>Error:</strong> {meta.error_definition}. MAPE is not used because wind output can be close to zero.
         </li>
         <li>
           <strong>Missing data</strong> is shown as a gap or "—" and counted in coverage. It is never filled in.

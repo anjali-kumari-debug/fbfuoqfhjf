@@ -72,15 +72,28 @@ Browser ◀── React (built static files) ◀── FastAPI ── app/analys
 
 ### API
 
+All dates are **decision dates**. Times are Europe/London. `decision_time`
+defaults to `10:00`, a demo assumption rather than a market rule.
+
 | Endpoint | Returns |
 |---|---|
 | `GET /api/health` | `{"status": "ok"}` |
-| `GET /api/meta` | Date range, default cutoff with its demo-assumption label, method notes, data retrieval date, attribution |
-| `GET /api/decision?date=2026-01-15&cutoff=10:00` | Per-hour forecast, publish time used, actual, error and lead time, plus coverage and metrics for that decision |
-| `GET /api/accuracy?cutoff=10:00` | Per-day table, overall metrics and coverage, error histogram for all January decisions |
+| `GET /api/forecast?decision_date=2026-01-10&decision_time=10:00` | Decision cutoff with its timezone offset (and in UTC), delivery date, and for each hourly interval: target time, selected forecast, its publish time, the retrospective actual, the error (only for matched intervals) and the lead time. Also coverage and that day's metrics. |
+| `GET /api/accuracy?start_date=2026-01-01&end_date=2026-01-31&decision_time=10:00` | Pooled MAE, RMSE, bias and percentiles over all matched intervals; a daily table with each date's own cutoff, metrics and coverage; expected / forecast / actual / matched interval counts; the error sign definition; the decision-time assumption; an error histogram. `start_date` and `end_date` default to the whole of January. |
+| `GET /api/meta` | Decision-date range, default decision time and its label, method notes, data retrieval date, attribution |
 
-Invalid input (a date outside January, or a malformed cutoff) returns HTTP 422
-with a clear message. Interactive API docs are at `/docs`.
+- **Coverage counts are reported separately:** `expected_intervals`,
+  `forecast_intervals`, `actual_intervals` and `matched_intervals`. Metrics use
+  matched intervals only, and are `null` when there are none.
+- **Bad input gets HTTP 422 with a specific message:** dates outside
+  January 2026, malformed dates, invalid times (for example `25:00` or `9:00`),
+  `start_date` after `end_date`, and a missing `decision_date`.
+- **Data loading:** the processed data is loaded **once at startup**. If a
+  required file is missing, startup stops with instructions to run the data
+  pipeline. No request ever calls Elexon.
+- Routes (`app/main.py`) only validate input and shape JSON. Selection,
+  alignment and metrics live in `app/analysis.py`.
+- Interactive API docs are at `/docs`.
 
 ## Running it
 
@@ -128,7 +141,7 @@ to avoid the common defaults 5173 and 8000.
 
 | What | Where to run | Command |
 |---|---|---|
-| Backend tests (92: selection, cutoff boundary, missing data, timezones, metrics, API, cleaning, retries, pipeline) | `backend/` | `../.venv/bin/python -m pytest` |
+| Backend tests (108: selection, cutoff boundary, missing data, timezones, metrics, API endpoints and validation, cleaning, retries, pipeline) | `backend/` | `../.venv/bin/python -m pytest` |
 | Frontend tests (6: London-time display, missing values, formatting) | `frontend/` | `npm test` |
 | Frontend lint | `frontend/` | `npm run lint` |
 | Production build | `frontend/` | `npm run build` |
@@ -213,12 +226,13 @@ The build fails with a clear message if there is neither committed data nor
 | **backend/** | |
 | `backend/requirements.txt` | Pinned Python dependencies |
 | `backend/pytest.ini` | pytest configuration |
-| `backend/app/main.py` | FastAPI app: input validation, JSON endpoints, serving the built frontend |
+| `backend/app/main.py` | FastAPI routes: input validation, loading the data once at startup, JSON endpoints, serving the built frontend |
+| `backend/app/serialize.py` | Converts pandas/numpy values to JSON-safe values (NaN becomes `null`, timestamps become UTC strings) |
 | `backend/app/analysis.py` | Core logic: delivery-day hours, forecast selection at the cutoff, hourly alignment, coverage, metrics |
 | `backend/app/elexon.py` | Elexon API client (bounded chunks, timeouts, bounded retries) and cleaning (WIND filter, UTC parsing, validation, duplicate and conflict handling) |
 | `backend/app/fetch_data.py` | Data pipeline CLI (`python -m backend.app.fetch_data --decision-month 2026-01`): plans ranges, fetches, preserves raw, cleans, writes processed CSVs and the manifest |
 | `backend/tests/test_analysis.py` | Tests for selection, cutoff boundary, missing data, timezones and clock changes, 31 Jan → 1 Feb, metrics, plus checks on the real processed data |
-| `backend/tests/test_api.py` | API tests: responses, validation (422), `null` rather than NaN in JSON, static frontend serving |
+| `backend/tests/test_api.py` | Endpoint tests: required fields, cutoff with timezone, separate coverage counts, pooled vs daily metrics, null metrics, 422 validation, loading once at startup, clear failure when data is missing, static frontend |
 | `backend/tests/test_elexon_clean.py` | Cleaning tests: WIND filter, exact duplicates vs conflicts, validation, grid checks, older publications kept, missing values |
 | `backend/tests/test_fetch_data.py` | Pipeline tests against a fake API: date planning, retries and their limits, raw files preserved byte for byte, chunk sizes, manifest, coverage without filling gaps |
 | **frontend/** | |

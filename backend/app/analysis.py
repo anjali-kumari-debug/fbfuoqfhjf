@@ -151,20 +151,26 @@ def decision_table(
 
 
 def coverage(table: pd.DataFrame) -> dict:
-    """Counts of hours with data, out of the hours expected in the delivery day."""
+    """Interval counts, reported separately, out of the intervals expected.
+
+    expected: delivery intervals (hours) in the London delivery day(s)
+    forecast: intervals with a selected (eligible) forecast
+    actual:   intervals with an actual value
+    matched:  intervals with both, i.e. the only ones used by the metrics
+    """
     expected = len(table)
     forecast = int(table["forecast_mw"].notna().sum())
     actual = int(table["actual_mw"].notna().sum())
-    paired = int(table["error_mw"].notna().sum())
+    matched = int(table["error_mw"].notna().sum())
     ratio = lambda n: n / expected if expected else None  # noqa: E731
     return {
-        "expected_hours": expected,
-        "forecast_hours": forecast,
-        "actual_hours": actual,
-        "paired_hours": paired,
+        "expected_intervals": expected,
+        "forecast_intervals": forecast,
+        "actual_intervals": actual,
+        "matched_intervals": matched,
         "forecast_coverage": ratio(forecast),
         "actual_coverage": ratio(actual),
-        "paired_coverage": ratio(paired),
+        "matched_coverage": ratio(matched),
     }
 
 
@@ -187,6 +193,21 @@ def error_metrics(errors: pd.Series) -> dict:
     for p, v in zip(PERCENTILES, np.percentile(values, PERCENTILES)):
         result[f"p{p}_mw"] = float(v)
     return result
+
+
+def error_histogram(errors: pd.Series, bin_mw: int = 500) -> list[dict]:
+    """Counts of matched-interval errors in fixed-width bins, e.g. [-500, 0), [0, 500)."""
+    values = errors.dropna().to_numpy(dtype=float)
+    if values.size == 0:
+        return []
+    low = np.floor(values.min() / bin_mw) * bin_mw
+    high = np.floor(values.max() / bin_mw) * bin_mw + bin_mw
+    edges = np.arange(low, high + bin_mw, bin_mw)
+    counts, _ = np.histogram(values, bins=edges)
+    return [
+        {"from_mw": int(edges[i]), "to_mw": int(edges[i + 1]), "count": int(counts[i])}
+        for i in range(len(counts))
+    ]
 
 
 def accuracy(

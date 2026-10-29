@@ -13,7 +13,8 @@ Hour estimates are guides. Stop and review at the end of each stage.
       metrics. pytest covers edge cases (cutoff boundary, missing data,
       31 Jan → 1 Feb).
 - [x] **4. FastAPI endpoints (1.5h):** for example `/api/health`,
-      `/api/decision?date=&cutoff=` and `/api/accuracy?cutoff=`, with tests.
+      `/api/forecast?decision_date=&decision_time=` and
+      `/api/accuracy?start_date=&end_date=&decision_time=`, with tests.
 - [x] **5. React UI (3h):** decision view (forecast vs actual chart, cutoff
       label, coverage) and accuracy view (MAE, RMSE, bias, error distribution).
 - [x] **6. Docker (1h):** multi-stage build. FastAPI serves `frontend/dist`.

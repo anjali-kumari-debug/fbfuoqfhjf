@@ -211,9 +211,9 @@ def test_coverage_counts_missing_hours():
     a = actuals_frame([("2026-01-02T00:00Z", 100), ("2026-01-02T00:30Z", 100)])
     result = accuracy(a, f, [DECISION], TEN)
     day = result["days"].iloc[0]
-    assert day["expected_hours"] == 24
-    assert day["paired_hours"] == 1
-    assert day["paired_coverage"] == pytest.approx(1 / 24)
+    assert day["expected_intervals"] == 24
+    assert day["matched_intervals"] == 1
+    assert day["matched_coverage"] == pytest.approx(1 / 24)
     assert result["overall"]["n"] == 1
 
 
@@ -231,8 +231,8 @@ JANUARY = [date(2026, 1, d) for d in range(1, 32)]
 def test_snapshot_january_at_default_cutoff_has_full_coverage(snapshot):
     actuals, forecasts = snapshot
     overall = accuracy(actuals, forecasts, JANUARY, analysis.DEFAULT_CUTOFF)["overall"]
-    assert overall["expected_hours"] == 31 * 24
-    assert overall["paired_coverage"] == 1.0
+    assert overall["expected_intervals"] == 31 * 24
+    assert overall["matched_coverage"] == 1.0
 
 
 @pytest.mark.parametrize("cutoff", [time(0, 0), time(10, 0), time(23, 59)])
@@ -272,7 +272,7 @@ def test_hand_calculated_metrics_use_only_matched_pairs():
     assert m["rmse_mw"] == pytest.approx(math.sqrt(1100 / 3))
     assert m["bias_mw"] == pytest.approx(10.0)
     c = analysis.coverage(table)
-    assert (c["expected_hours"], c["forecast_hours"], c["actual_hours"], c["paired_hours"]) == (24, 4, 4, 3)
+    assert (c["expected_intervals"], c["forecast_intervals"], c["actual_intervals"], c["matched_intervals"]) == (24, 4, 4, 3)
 
 
 def test_legitimate_zero_generation_is_a_real_value_not_missing():
@@ -291,7 +291,7 @@ def test_no_matched_intervals_gives_null_metrics_and_separate_counts():
     a = actuals_frame(half_hours(H[1], 100))  # actual only for a different hour
     result = accuracy(a, f, [DECISION], TEN)
     day = result["days"].iloc[0]
-    assert (day["expected_hours"], day["forecast_hours"], day["actual_hours"], day["paired_hours"]) == (24, 1, 1, 0)
+    assert (day["expected_intervals"], day["forecast_intervals"], day["actual_intervals"], day["matched_intervals"]) == (24, 1, 1, 0)
     assert result["overall"]["n"] == 0
     for key in ("mae_mw", "rmse_mw", "bias_mw", "p50_mw"):
         assert result["overall"][key] is None

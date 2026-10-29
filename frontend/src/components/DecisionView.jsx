@@ -1,5 +1,5 @@
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { decisionUrl } from '../api'
+import { forecastUrl } from '../api'
 import { addDays, londonDateTime, londonTime, longDate, mw, percent, signedMw } from '../format'
 import { useChartColors } from '../theme'
 import { useApi } from '../useApi'
@@ -7,7 +7,7 @@ import ChartTooltip from './ChartTooltip'
 import StatTile from './StatTile'
 
 export default function DecisionView({ meta, date, onDateChange, cutoff }) {
-  const { data, error, loading } = useApi(decisionUrl(date, cutoff))
+  const { data, error, loading } = useApi(forecastUrl(date, cutoff))
   const first = meta.first_decision_date
   const last = meta.last_decision_date
 
@@ -40,7 +40,7 @@ export default function DecisionView({ meta, date, onDateChange, cutoff }) {
 }
 
 function DecisionDetail({ data, stale }) {
-  const forecasts = data.hours.filter((h) => h.forecast_mw != null)
+  const forecasts = data.intervals.filter((h) => h.forecast_mw != null)
   const lowest = forecasts.reduce((a, b) => (b.forecast_mw < a.forecast_mw ? b : a), forecasts[0])
   const mean = forecasts.length ? forecasts.reduce((s, h) => s + h.forecast_mw, 0) / forecasts.length : null
   const { coverage, metrics } = data
@@ -48,7 +48,7 @@ function DecisionDetail({ data, stale }) {
   return (
     <div className={stale ? 'stale' : undefined}>
       <h2>
-        Decision on {longDate(data.decision_date)} at {data.cutoff_local} → delivery on{' '}
+        Decision on {longDate(data.decision_date)} at {data.decision_time} → delivery on{' '}
         {longDate(data.delivery_date)}
       </h2>
 
@@ -63,12 +63,12 @@ function DecisionDetail({ data, stale }) {
         <StatTile
           label="Lowest forecast hour"
           value={mw(lowest?.forecast_mw)}
-          hint={lowest ? `at ${londonTime(lowest.start_time)}` : undefined}
+          hint={lowest ? `at ${londonTime(lowest.target_time)}` : undefined}
         />
         <StatTile
           label="Forecast coverage"
           value={percent(coverage.forecast_coverage)}
-          hint={`${coverage.forecast_hours} of ${coverage.expected_hours} hours`}
+          hint={`${coverage.forecast_intervals} of ${coverage.expected_intervals} hours`}
         />
       </div>
 
@@ -80,16 +80,16 @@ function DecisionDetail({ data, stale }) {
         <StatTile label="RMSE" value={mw(metrics.rmse_mw)} hint="penalises large misses" />
         <StatTile
           label="Scored hours"
-          value={percent(coverage.paired_coverage)}
-          hint={`${coverage.paired_hours} of ${coverage.expected_hours} hours have both`}
+          value={percent(coverage.matched_coverage)}
+          hint={`${coverage.matched_intervals} of ${coverage.expected_intervals} hours have both`}
         />
       </div>
 
-      <ForecastActualChart hours={data.hours} />
+      <ForecastActualChart hours={data.intervals} />
 
       <details>
         <summary>Show hourly table</summary>
-        <HourlyTable hours={data.hours} />
+        <HourlyTable hours={data.intervals} />
       </details>
     </div>
   )
@@ -97,7 +97,7 @@ function DecisionDetail({ data, stale }) {
 
 function ForecastActualChart({ hours }) {
   const colours = useChartColors()
-  const rows = hours.map((h) => ({ ...h, label: londonTime(h.start_time) }))
+  const rows = hours.map((h) => ({ ...h, label: londonTime(h.target_time) }))
   const lastRow = rows[rows.length - 1]
   // Push the two end labels apart so they never overlap.
   const forecastOnTop = (lastRow?.forecast_mw ?? 0) >= (lastRow?.actual_mw ?? 0)
@@ -151,7 +151,7 @@ function ForecastActualChart({ hours }) {
                       ['Forecast', mw(h.forecast_mw), colours.forecast],
                       ['Actual', mw(h.actual_mw), colours.actual],
                       ['Error', signedMw(h.error_mw)],
-                      ['Published', londonDateTime(h.publish_time)],
+                      ['Published', londonDateTime(h.forecast_publish_time)],
                     ]
                   }
                 />
@@ -200,12 +200,12 @@ function HourlyTable({ hours }) {
       </thead>
       <tbody>
         {hours.map((h) => (
-          <tr key={h.start_time}>
-            <td>{londonTime(h.start_time)}</td>
+          <tr key={h.target_time}>
+            <td>{londonTime(h.target_time)}</td>
             <td>{mw(h.forecast_mw)}</td>
             <td>{mw(h.actual_mw)}</td>
             <td>{signedMw(h.error_mw)}</td>
-            <td>{londonDateTime(h.publish_time)}</td>
+            <td>{londonDateTime(h.forecast_publish_time)}</td>
             <td>{h.lead_time_hours ?? '—'}</td>
           </tr>
         ))}
