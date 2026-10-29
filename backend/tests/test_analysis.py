@@ -242,3 +242,124 @@ def test_snapshot_never_uses_forecast_published_after_cutoff(snapshot, cutoff):
     cutoffs = hours["decision_date"].map(lambda d: cutoff_datetime(d, cutoff))
     used = hours["publish_time"].notna()
     assert (hours.loc[used, "publish_time"] <= cutoffs[used]).all()
+
+
+# ------------------------------------------------------------ edge cases added for the analysis spec
+
+H = ["2026-01-02T00:00:00Z", "2026-01-02T01:00:00Z", "2026-01-02T02:00:00Z", "2026-01-02T03:00:00Z", "2026-01-02T04:00:00Z"]
+
+
+def half_hours(hour, value):
+    """Both half-hours of an hour with the same value, so the hourly mean equals value."""
+    start = pd.Timestamp(hour)
+    return [(start.isoformat(), value), ((start + pd.Timedelta(minutes=30)).isoformat(), value)]
+
+
+def test_hand_calculated_metrics_use_only_matched_pairs():
+    # hour:      0     1     2     3 (no actual)   4 (no forecast)
+    # forecast: 110    90   130    500             -
+    # actual:   100   100   100     -             100
+    # errors:   +10   -10   +30
+    # MAE  = (10 + 10 + 30) / 3            = 16.667
+    # RMSE = sqrt((100 + 100 + 900) / 3)   = 19.149
+    # bias = (10 - 10 + 30) / 3            = 10.0
+    f = forecasts_frame([("2026-01-01T09:30Z", h, v) for h, v in zip(H[:4], [110, 90, 130, 500])])
+    a = actuals_frame(half_hours(H[0], 100) + half_hours(H[1], 100) + half_hours(H[2], 100) + half_hours(H[4], 100))
+    table = decision_table(a, f, DECISION, TEN)
+    m = error_metrics(table["error_mw"])
+    assert m["n"] == 3
+    assert m["mae_mw"] == pytest.approx(50 / 3)
+    assert m["rmse_mw"] == pytest.approx(math.sqrt(1100 / 3))
+    assert m["bias_mw"] == pytest.approx(10.0)
+    c = analysis.coverage(table)
+    assert (c["expected_hours"], c["forecast_hours"], c["actual_hours"], c["paired_hours"]) == (24, 4, 4, 3)
+
+
+def test_legitimate_zero_generation_is_a_real_value_not_missing():
+    f = forecasts_frame([("2026-01-01T09:30Z", FIRST_HOUR, 0)])
+    a = actuals_frame(half_hours(FIRST_HOUR, 0))
+    table = decision_table(a, f, DECISION, TEN)
+    assert first_hour(table, "forecast_mw") == 0
+    assert first_hour(table, "actual_mw") == 0
+    assert first_hour(table, "error_mw") == 0
+    m = error_metrics(table["error_mw"])
+    assert m["n"] == 1 and m["mae_mw"] == 0  # zero error, not None
+
+
+def test_no_matched_intervals_gives_null_metrics_and_separate_counts():
+    f = forecasts_frame([("2026-01-01T09:30Z", FIRST_HOUR, 110)])
+    a = actuals_frame(half_hours(H[1], 100))  # actual only for a different hour
+    result = accuracy(a, f, [DECISION], TEN)
+    day = result["days"].iloc[0]
+    assert (day["expected_hours"], day["forecast_hours"], day["actual_hours"], day["paired_hours"]) == (24, 1, 1, 0)
+    assert result["overall"]["n"] == 0
+    for key in ("mae_mw", "rmse_mw", "bias_mw", "p50_mw"):
+        assert result["overall"][key] is None
+
+
+def test_month_analysis_uses_each_decision_dates_own_cutoff():
+    # Published 1 Jan 11:00, after the 1 Jan 10:00 cutoff but long before a month-end cutoff.
+    f = forecasts_frame(
+        [
+            ("2026-01-01T09:30Z", FIRST_HOUR, 100),
+            ("2026-01-01T11:00Z", FIRST_HOUR, 999),
+            ("2026-01-02T09:30Z", "2026-01-03T00:00:00Z", 200),
+        ]
+    )
+    hours = accuracy(actuals_frame([]), f, [date(2026, 1, 1), date(2026, 1, 2)], TEN)["hours"]
+    first_decision = hours[hours["decision_date"] == date(2026, 1, 1)]
+    assert first_decision.loc[pd.Timestamp(FIRST_HOUR), "forecast_mw"] == 100  # not the 11:00 forecast
+    second_decision = hours[hours["decision_date"] == date(2026, 1, 2)]
+    assert second_decision.loc[pd.Timestamp("2026-01-03T00:00Z"), "forecast_mw"] == 200
+
+
+def test_exact_duplicate_actuals_are_harmless():
+    a = actuals_frame(half_hours(FIRST_HOUR, 100) * 2)  # every row twice
+    hours = pd.DatetimeIndex([pd.Timestamp(FIRST_HOUR)])
+    assert hourly_actuals(a, hours).iloc[0] == 100
+
+
+def test_conflicting_duplicate_actuals_become_missing():
+    a = actuals_frame(half_hours(FIRST_HOUR, 100) + [(FIRST_HOUR, 999)])
+    hours = pd.DatetimeIndex([pd.Timestamp(FIRST_HOUR)])
+    assert math.isnan(hourly_actuals(a, hours).iloc[0])
+
+
+@pytest.mark.parametrize("order", [(10, 20), (20, 10)])
+def test_conflicting_duplicate_forecasts_are_never_picked_by_row_order(order):
+    f = forecasts_frame(
+        [
+            ("2026-01-01T07:30Z", FIRST_HOUR, 50),
+            ("2026-01-01T09:30Z", FIRST_HOUR, order[0]),
+            ("2026-01-01T09:30Z", FIRST_HOUR, order[1]),  # same publication and hour, different value
+        ]
+    )
+    table = select_forecasts(f, DECISION, TEN)
+    assert first_hour(table, "forecast_mw") == 50  # conflict is unusable: fall back to older publication
+    assert first_hour(table, "publish_time") == pd.Timestamp("2026-01-01T07:30Z")
+
+
+def test_exact_duplicate_forecasts_are_harmless():
+    row = ("2026-01-01T09:30Z", FIRST_HOUR, 120)
+    assert first_hour(select_forecasts(forecasts_frame([row, row]), DECISION, TEN), "forecast_mw") == 120
+
+
+def test_load_data_parses_timestamps_as_utc_and_selection_ignores_row_order(tmp_path):
+    (tmp_path / "actuals.csv").write_text(
+        "start_time,generation_mw\n"
+        "2026-01-02T00:30:00Z,300\n"  # out of order
+        "2026-01-02T00:00:00+00:00,100\n"  # explicit offset instead of Z
+    )
+    (tmp_path / "forecasts.csv").write_text(
+        "publish_time,start_time,generation_mw\n"
+        "2026-01-01T09:30:00Z,2026-01-02T00:00:00Z,250\n"
+        "2026-01-01T04:30:00Z,2026-01-02T00:00:00Z,150\n"  # older publication listed last
+        "2026-01-01T07:30:00Z,2026-01-02T00:00:00Z,,\n".rstrip(",\n") + "\n"
+    )
+    actuals, forecasts = analysis.load_data(tmp_path)
+    for col in (actuals["start_time"], forecasts["publish_time"], forecasts["start_time"]):
+        assert str(col.dt.tz) == "UTC"
+    assert pd.isna(forecasts["generation_mw"]).sum() == 1  # empty stays missing, not 0
+    table = decision_table(actuals, forecasts, DECISION, TEN)
+    assert first_hour(table, "forecast_mw") == 250  # latest by time, not by row position
+    assert first_hour(table, "actual_mw") == 200

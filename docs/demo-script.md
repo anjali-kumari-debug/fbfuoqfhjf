@@ -94,7 +94,7 @@ reasoning.
     because output can be near zero.
 
 ### 4. Quality and practices (3:30–5:00)
-- Run `pytest` live (82 tests). Highlight the tests for:
+- Run `pytest` live (92 tests). Highlight the tests for:
   - the cutoff boundary (10:00 is used, 10:01 is not);
   - missing data staying `null`;
   - 31 Jan → 1 Feb;

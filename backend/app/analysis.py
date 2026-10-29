@@ -80,22 +80,37 @@ def delivery_hours(decision_date: date) -> pd.DatetimeIndex:
 # ---------------------------------------------------------------- selection and alignment
 
 
+def one_value_per_key(df: pd.DataFrame, key: list[str]) -> pd.DataFrame:
+    """At most one generation value per key, without picking arbitrarily.
+
+    Exact duplicates collapse to one row. If a key has conflicting values, there
+    is no principled winner, so its value becomes NaN (missing), never a guess.
+    """
+    df = df.drop_duplicates(subset=[*key, "generation_mw"])
+    conflict = df.duplicated(key, keep=False)
+    if not conflict.any():
+        return df
+    resolved = df[conflict].drop_duplicates(key).copy()
+    resolved["generation_mw"] = np.nan
+    return pd.concat([df[~conflict], resolved])
+
+
 def select_forecasts(forecasts: pd.DataFrame, decision_date: date, cutoff: time) -> pd.DataFrame:
     """Latest forecast published at or before the cutoff, for each delivery hour.
 
     Returns one row per delivery hour (index start_time, UTC) with columns
     forecast_mw and publish_time. Both are NaN/NaT when no eligible forecast
-    exists. A row with no generation value is not treated as a forecast.
+    exists. A row with no usable value (missing, or conflicting duplicates) is
+    not a forecast, so the hour falls back to the latest earlier publication.
+    Input order does not matter.
     """
     cutoff_utc = cutoff_datetime(decision_date, cutoff)
     hours = delivery_hours(decision_date)
-    eligible = forecasts[
-        (forecasts["publish_time"] <= cutoff_utc)
-        & forecasts["start_time"].isin(hours)
-        & forecasts["generation_mw"].notna()
-    ]
+    eligible = forecasts[(forecasts["publish_time"] <= cutoff_utc) & forecasts["start_time"].isin(hours)]
+    eligible = one_value_per_key(eligible, ["publish_time", "start_time"])
+    eligible = eligible[eligible["generation_mw"].notna()]
     latest = (
-        eligible.sort_values("publish_time")
+        eligible.sort_values("publish_time", kind="stable")
         .drop_duplicates("start_time", keep="last")
         .set_index("start_time")
     )
@@ -106,8 +121,15 @@ def select_forecasts(forecasts: pd.DataFrame, decision_date: date, cutoff: time)
 
 
 def hourly_actuals(actuals: pd.DataFrame, hours: pd.DatetimeIndex) -> pd.Series:
-    """Mean of the two half-hours in each hour. NaN if either half is missing."""
-    half_hourly = actuals.set_index("start_time")["generation_mw"].astype(float)
+    """Mean of the two half-hours in each hour. NaN if either half is missing.
+
+    Duplicate half-hours are handled by one_value_per_key (conflicts -> missing).
+    """
+    half_hourly = (
+        one_value_per_key(actuals[["start_time", "generation_mw"]], ["start_time"])
+        .set_index("start_time")["generation_mw"]
+        .astype(float)
+    )
     first = half_hourly.reindex(hours).to_numpy()
     second = half_hourly.reindex(hours + pd.Timedelta(minutes=30)).to_numpy()
     return pd.Series((first + second) / 2, index=hours, name="actual_mw")

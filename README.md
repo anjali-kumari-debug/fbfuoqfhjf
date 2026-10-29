@@ -128,7 +128,7 @@ to avoid the common defaults 5173 and 8000.
 
 | What | Where to run | Command |
 |---|---|---|
-| Backend tests (82: selection, cutoff boundary, missing data, timezones, metrics, API, cleaning, retries, pipeline) | `backend/` | `../.venv/bin/python -m pytest` |
+| Backend tests (92: selection, cutoff boundary, missing data, timezones, metrics, API, cleaning, retries, pipeline) | `backend/` | `../.venv/bin/python -m pytest` |
 | Frontend tests (6: London-time display, missing values, formatting) | `frontend/` | `npm test` |
 | Frontend lint | `frontend/` | `npm run lint` |
 | Production build | `frontend/` | `npm run build` |
